@@ -35,7 +35,7 @@ The binaries are built by GoReleaser from `.goreleaser.yaml`: `CGO_ENABLED=0`, `
 ## Release checklist (the advisor)
 
 1. **Decide the version** with the table above.
-2. **Changelog.** On the commission's branch (or a branch of its own), move the entries under `## [Unreleased]` in `CHANGELOG.md` into a new section `## [X.Y.Z] - YYYY-MM-DD` (the release date), leave `## [Unreleased]` empty above it, and update the links at the bottom: `[Unreleased]` compares `vX.Y.Z...HEAD`, and a new `[X.Y.Z]` line compares the previous tag with `vX.Y.Z`.
+2. **Changelog.** On the commission's branch (or a branch of its own), move the entries under `## [Unreleased]` in `CHANGELOG.md` into a new section `## [X.Y.Z] - YYYY-MM-DD` (the release date), leave `## [Unreleased]` empty above it, and update the links at the bottom: `[Unreleased]` compares `vX.Y.Z...HEAD`, and a new `[X.Y.Z]` line compares the previous tag with `vX.Y.Z`. In the same commit, change every version in the README's [Download a release](../README.md#download-a-release) section (`VERSION=`, `$Version =`, the example tag and file name) to `X.Y.Z`: the README ships in every archive, and the Go test `TestReadmePinsReleasedVersion` (`cmd/holocron/releaseversion_test.go`) fails from the moment the changelog has the new section until the README names it, so neither change can go in alone.
 3. **Merge** into `main` (`--no-ff`, recorded in [the ledger](../tasks/holocron/ledger.md)) and push `main`.
 4. **CI green.** Wait for the [CI](ci.md) run of that `main` commit to pass, `release-check` included (it builds the same archives as a snapshot). Do not tag a red or unfinished run.
 5. **Tag** the merge commit from an up-to-date `main`, with an annotated tag, and push only that tag:
