@@ -59,4 +59,4 @@ Branch `main`. Rules for agents are in AGENTS.md. Facts in the documents below c
 
 ## Optional
 
-- [README](README.md): front door - what Holocron offers, quick start, documentation index, stress tests, licence
+- [README](README.md): front door - features, supported platforms, requirements, install from GitHub Releases or source, quick start for Linux, macOS and Windows, documentation index, stress tests, licence
