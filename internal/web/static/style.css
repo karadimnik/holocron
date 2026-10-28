@@ -184,7 +184,7 @@ footer.note{margin-top:22px;color:var(--ink-3);font-size:12px;border-top:1px sol
 .scard.crit{border-left-color:var(--critical)} .scard.crit .verdict{color:#f09a9a}
 .scard .stext{flex:1;min-width:min(100%,260px)}
 .scard .headline{margin:0;font-size:18px;font-weight:600}
-.sdetail{margin:4px 0 0;padding:0;list-style:none;color:var(--ink-2)}
+.sdetail{margin:4px 0 0;padding:0;list-style:none;color:var(--ink-2);overflow-wrap:anywhere}
 .sdetail li{margin-top:2px}
 .sdetail a,.linkish{color:#8fbcf5}
 .linkish{background:none;border:0;padding:0;font:inherit;text-decoration:underline;cursor:pointer}
@@ -194,7 +194,10 @@ footer.note{margin-top:22px;color:var(--ink-3);font-size:12px;border-top:1px sol
 .notice b{color:var(--ink)}
 
 /* ---- toast: what the last action did, including what it printed ---- */
-#toast:not(:empty){margin-bottom:16px}
+/* Fixed to the bottom of the window, like a snackbar, so the result (and its Undo) is seen
+   wherever the page is scrolled. */
+#toast:not(:empty){position:fixed;left:50%;bottom:16px;transform:translateX(-50%);z-index:20;
+  width:min(640px,calc(100% - 24px));box-shadow:0 6px 24px rgba(0,0,0,.55);border-radius:var(--r)}
 .toast{display:flex;align-items:flex-start;gap:11px;padding:12px var(--pad);border-radius:var(--r)}
 .toast.good{background:#16231a;border:1px solid #2c5a33;color:#b4f0bd}
 .toast.crit{background:#2a1818;border:1px solid #5a2b2b;color:#f0b4b4}
@@ -203,6 +206,8 @@ footer.note{margin-top:22px;color:var(--ink-3);font-size:12px;border-top:1px sol
 .toast pre{margin:8px 0 0;font:12px/1.5 var(--mono);color:var(--ink-2);white-space:pre-wrap;
   max-height:170px;overflow:auto}
 .toast .x{background:none;border:0;color:inherit;opacity:.7;padding:0 4px}
+.toast .detail{margin-top:3px;font-size:12px;opacity:.85}
+.toast .btn{flex:none}
 
 /* ---- progress: the elapsed seconds, so a 52 s action is visibly alive ---- */
 #progress:not(:empty){margin-bottom:16px}

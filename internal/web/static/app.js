@@ -27,6 +27,7 @@ const POLL_MS = 5000;
 // then, and the server refuses it anyway.
 let viewOnly = false;
 let role = "admin"; // the loopback listener's owner is an admin; the LAN says per user
+let accessKnown = false; // detectAccess has run: until then nothing an admin alone may see is shown
 
 const el = (id) => document.getElementById(id);
 
@@ -131,7 +132,7 @@ function renderStandalone() {
   const starting = busyControl !== null && busyControl.action === "start";
   el("standalone").hidden = systemState !== "stopped" && !starting;
   const button = el("startHolocron");
-  button.hidden = viewOnly;
+  button.hidden = viewOnly || !accessKnown;
   if (starting) {
     button.setAttribute("aria-busy", "true");
     button.textContent = "Starting… " + busySeconds() + "s";
@@ -361,6 +362,8 @@ function render(payload, fetchError) {
   el("recCount").textContent = recording + " of " + enabled + " recording";
 
   // ---- layout A: table ----
+  // Both layouts are rebuilt on every poll; a switch that had the focus gets it back.
+  const focused = document.activeElement && document.activeElement.matches(".tgl[data-camera]") ? document.activeElement.dataset.camera : null;
   el("tbody").innerHTML = cams.map((cam) =>
     '<tr data-cam="' + esc(cam.Name) + '">' +
     '<td><div class="cam-name">' + esc(cam.Name) + "</div>" + cameraDetail(cam, live) + "</td>" +
@@ -382,6 +385,7 @@ function render(payload, fetchError) {
     return '<div class="crow" data-cam="' + esc(cam.Name) + '"><div class="main"><div class="nm">' + esc(cam.Name) + "</div>" +
       '<div class="sb">' + sub + "</div></div>" + cameraChip(cam, live) + toggle(cam, live) + "</div>";
   }).join("");
+  if (focused !== null) focusCameraSwitch(focused);
 
   // ---- events ----
   const events = (status && Array.isArray(status.Events) && status.Events) || [];
@@ -525,6 +529,7 @@ async function acknowledgeNotice(button) {
 // ---------------------------------------------------------------------------
 
 function toast(cls, message, lines) {
+  clearUndo();
   const output = lines && lines.length
     ? "<pre>" + esc(lines.join("\n")) + "</pre>"
     : "";
@@ -623,25 +628,23 @@ async function runControl(scope, action) {
   }
 }
 
+// toggleRecord switches one camera's recording. It asks nothing: switching off
+// is routine and is undone as easily (NN/g, Apple HIG: no confirmation for a
+// common, undoable action), so it offers Undo instead (undoToast). The switch
+// keeps the keyboard focus across the re-render the change causes.
 async function toggleRecord(name, enable) {
   if (viewOnly) return;
   if (anyBusy()) return;
 
-  if (!enable) {
-    const ok = await confirmAction({
-      title: "Stop recording " + name + "?",
-      body: "No footage is captured from this camera until you turn it back on. The other cameras are unaffected.",
-      go: "Stop recording",
-    });
-    if (!ok) return;
-  }
-
+  const active = document.activeElement;
+  const keepFocus = !!active && (active.id === "toastUndo" || (active.matches(".tgl") && active.dataset.camera === name));
   busyCameras.add(name);
   render(last, null);
   try {
     const { ok, payload } = await sendJSON("POST", "api/cameras/" + encodeURIComponent(name) + "/record", { enabled: enable });
     if (ok && payload.ok) {
-      toast("good", "Recording " + (enable ? "enabled" : "disabled") + " for " + name + ".", payload.output);
+      if (enable) toast("good", "Recording switched on for " + name + ".");
+      else undoToast(name);
     } else {
       toast("crit", "Could not change recording for " + name + ": " + (payload.error || "unknown error"), payload.output);
     }
@@ -649,8 +652,59 @@ async function toggleRecord(name, enable) {
     toast("crit", "The server could not be reached: " + (err.message || err));
   } finally {
     busyCameras.delete(name);
-    poll();
+    await poll();
+    if (keepFocus) focusCameraSwitch(name);
   }
+}
+
+// UNDO_MS is how long the Undo stays offered; the countdown pauses while the
+// pointer or the keyboard focus is on the toast (WCAG 2.2.1), and the switch
+// itself stays the permanent way back.
+const UNDO_MS = 8000;
+let undoTimer = null;
+
+function clearUndo() {
+  clearTimeout(undoTimer);
+  undoTimer = null;
+}
+
+function undoToast(name) {
+  clearUndo();
+  el("toast").innerHTML =
+    '<div class="toast warn"><div class="body"><b>Recording switched off for ' + esc(name) + ".</b>" +
+    '<div class="detail">No footage is captured from this camera until it is switched on again.</div></div>' +
+    '<button class="btn small" type="button" id="toastUndo">Undo</button>' +
+    '<button class="x" id="toastX" type="button" aria-label="Dismiss">&times;</button></div>';
+  const box = el("toast").firstElementChild;
+  let left = UNDO_MS;
+  let since = Date.now();
+  const held = () => box.matches(":hover") || box.contains(document.activeElement);
+  const update = () => setTimeout(() => {
+    if (!box.isConnected) return;
+    if (held()) {
+      if (undoTimer !== null) left -= Date.now() - since;
+      clearUndo();
+    } else if (undoTimer === null) {
+      since = Date.now();
+      undoTimer = setTimeout(() => { if (box.isConnected) el("toast").innerHTML = ""; }, Math.max(left, 1000));
+    }
+  }, 0);
+  for (const kind of ["mouseenter", "mouseleave", "focusin", "focusout"]) box.addEventListener(kind, update);
+  el("toastUndo").onclick = () => {
+    clearUndo();
+    toggleRecord(name, true);
+  };
+  el("toastX").onclick = () => {
+    clearUndo();
+    el("toast").innerHTML = "";
+  };
+  update();
+}
+
+// focusCameraSwitch puts the focus on a camera's switch in the layout on screen.
+function focusCameraSwitch(name) {
+  const target = [...document.querySelectorAll(".tgl[data-camera]")].find((n) => n.dataset.camera === name && n.offsetParent !== null);
+  if (target && !target.disabled) target.focus();
 }
 
 // ---------------------------------------------------------------------------
@@ -1284,6 +1338,8 @@ async function detectAccess() {
   el("adminTab").classList.toggle("hide", viewer || readOnly);
   // The phone panel is for every signed-in user, so a viewer (who has no Settings) keeps it.
   el("phoneTab").classList.toggle("hide", !onLan);
+  accessKnown = true;
+  renderStandalone();
   if (!viewer && !readOnly) await loadAdmin();
   if (roleTab(location.hash.slice(1))) showTab(location.hash.slice(1));
 }

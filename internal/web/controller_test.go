@@ -331,7 +331,7 @@ func TestDashboardShowsStateNotCommands(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, rule := range []string{`el("standalone").hidden = systemState !== "stopped" && !starting;`, `button.hidden = viewOnly;`} {
+	for _, rule := range []string{`el("standalone").hidden = systemState !== "stopped" && !starting;`, `button.hidden = viewOnly || !accessKnown;`} {
 		if !strings.Contains(string(app), rule) {
 			t.Errorf("app.js lost the rule %s", rule)
 		}
@@ -339,5 +339,36 @@ func TestDashboardShowsStateNotCommands(t *testing.T) {
 	keys := regexp.MustCompile(`"((?:start|stop):\w+)": \{ seconds:`).FindAllStringSubmatch(string(app), -1)
 	if len(keys) != 2 || keys[0][1] != "start:all" || keys[1][1] != "stop:all" {
 		t.Errorf("ACTION_EXPECTATION entries %v, want start:all and stop:all", keys)
+	}
+}
+
+// Switching a camera off asks nothing and offers Undo (D24): toggleRecord holds no confirmation, the
+// Undo calls the same endpoint to switch it back on, and the toast region is a polite live region.
+func TestRecordSwitchOffOffersUndo(t *testing.T) {
+	app, err := staticFiles.ReadFile("static/app.js")
+	if err != nil {
+		t.Fatal(err)
+	}
+	body := regexp.MustCompile(`(?s)\nasync function toggleRecord\(name, enable\) \{(.*?)\n\}\n`).FindSubmatch(app)
+	if body == nil {
+		t.Fatal("no toggleRecord in app.js")
+	}
+	if strings.Contains(string(body[1]), "confirmAction") {
+		t.Error("switching a camera off asks for a confirmation")
+	}
+	if !strings.Contains(string(body[1]), "else undoToast(name);") {
+		t.Error("switching a camera off offers no Undo")
+	}
+	for _, want := range []string{"const UNDO_MS = 8000;", `toggleRecord(name, true);`, `id="toastUndo"`} {
+		if !strings.Contains(string(app), want) {
+			t.Errorf("app.js has no %s", want)
+		}
+	}
+	page, err := staticFiles.ReadFile("static/index.html")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(page), `<div id="toast" role="status" aria-live="polite"></div>`) {
+		t.Error("the toast region is not a polite live region")
 	}
 }
