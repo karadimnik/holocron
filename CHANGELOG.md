@@ -20,22 +20,20 @@ A version is `MAJOR.MINOR.PATCH`, tagged `vMAJOR.MINOR.PATCH`. The public interf
 
 ## [Unreleased]
 
+## [1.1.0] - 2026-10-28
+
 ### Changed
 
 - Web app: the Dashboard leads with a status summary ("Recording 6 of 6 cameras. Nothing needs attention." or what needs attention, with links to the camera or to Admin > Health) and no longer has a Start or Stop control; while Holocron is not running a notice gives `holocron up --detach`, and an admin gets one Start Holocron button.
 - Web app: switching a camera's recording off no longer asks; a toast offers Undo for 8 s instead.
 - Web app: Stop Holocron moved to Admin > System, in a Danger zone, behind a dialog that says what stops and how to start it again and needs STOP typed; after a stop the page says "Holocron has stopped" instead of "Server unreachable".
 - Web app: on a phone the tab bar scrolls instead of clipping the Admin tab, buttons and switches are at least 44 px tall, and busy and primary buttons meet AA contrast.
+- Web app: the page, sign-in and first-user pages are named Holocron (they said "IPCCTV control"), and the Stop advice names the logon task, the systemd unit and the launchd agent.
+- Web app: the Start and Stop buttons for the recorder and the viewers, which could never work (the viewers no longer exist and the recorder cannot be stopped apart from the rest), were removed together with the control row.
 
 ### Added
 
 - Web app: Admin > System > Reload configuration (`POST /api/admin/reload`, admin only, audited as `web.admin.reload`).
-
-## [1.0.2] - 2026-10-28
-
-### Changed
-
-- Web app: the Dashboard shows only the control that fits the state, Stop everything while Holocron runs and Start everything while it does not; the viewers buttons and the duplicate recorder buttons were removed, and the progress text says an action usually takes a few seconds.
 
 ### Fixed
 
@@ -69,7 +67,7 @@ The first version of Holocron in its own repository: a Go network video recorder
 - Builds for Windows (first-class and live), Linux and macOS, cross-compiled and tested in CI.
 - Licence: [PolyForm Noncommercial License 1.0.0](LICENSE) (decision D22).
 
-[Unreleased]: https://github.com/karadimnik/holocron/compare/v1.0.2...HEAD
-[1.0.2]: https://github.com/karadimnik/holocron/compare/v1.0.1...v1.0.2
+[Unreleased]: https://github.com/karadimnik/holocron/compare/v1.1.0...HEAD
+[1.1.0]: https://github.com/karadimnik/holocron/compare/v1.0.1...v1.1.0
 [1.0.1]: https://github.com/karadimnik/holocron/compare/v1.0.0...v1.0.1
 [1.0.0]: https://github.com/karadimnik/holocron/releases/tag/v1.0.0
