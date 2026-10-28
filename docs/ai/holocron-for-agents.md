@@ -254,6 +254,7 @@ A pid registry applies on every OS: each child's pid, start time and image are w
 - Integrate with `git merge --no-ff`, subject `Merge Holocron <id>: <summary>`. Never squash or rewrite pushed history. Undo a whole task with `git revert -m 1 <merge sha>`; the commits inside stay cherry-pickable (`git log <sha>^1..<sha>^2`).
 - [tasks/holocron/ledger.md](../../tasks/holocron/ledger.md) lists every merge, regenerated in the same push as the merge: `git log --first-parent --merges --reverse --date=short --format="%h|%ad|%s" main`.
 - No em dash anywhere (use `-`). `rm`, `cp` and `mv` may be interactive aliases on the Operator's machines: use `command rm -f`.
+- Releases ([docs/releasing.md](../releasing.md), D24): every merge to `main` that changes shipped behaviour gets a SemVer version. Only the advisor tags `vX.Y.Z` from `main`, after green CI and a `CHANGELOG.md` section; the tag triggers `.github/workflows/release.yml` (GoReleaser, SBOMs, attestation, draft published last). Executors never tag or release. Put your change's line under `## [Unreleased]` in [CHANGELOG.md](../../CHANGELOG.md); the release notes come from there.
 
 ## 15. Known limits and UNVERIFIED items
 
