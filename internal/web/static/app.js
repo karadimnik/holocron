@@ -10,9 +10,11 @@
 //     the server decides from the supervisor's PROCESS, never from
 //     status.json's State field. Closing the NVR window runs no cleanup, so the
 //     file can say "running" with a pid that has gone.
-//   - Every action takes seconds. The button that was pressed stays visible and
-//     busy, the others are disabled, and polling carries on, so the page can
-//     never look frozen or let a second action race the first.
+//   - Only the control that fits the state is shown: Stop while the supervisor
+//     runs, Start while it does not, neither while the state is unknown. The
+//     button that was pressed stays visible and busy until the action ends, and
+//     polling carries on, so the page can never look frozen or let a second
+//     action race the first.
 //   - Anything that stops footage being recorded asks first.
 
 const POLL_MS = 5000;
@@ -91,27 +93,31 @@ const busyCameras = new Set(); // camera names whose record toggle is in flight
 
 const anyBusy = () => busyControl !== null || busyCameras.size > 0;
 
-const SCOPE_LABEL = { all: "everything", recorder: "the recorder", dashboard: "the viewers" };
+const SCOPE_LABEL = { all: "everything" };
 
-// ACTION_EXPECTATION is what each action actually took when it was measured on
-// this system: stop viewers 15.2s, start viewers 12.5s, stop recorder 19.7s,
-// start recorder 27.3s, stop everything 17.3s, start everything 52.1s.
+// systemState is what the last poll said: "running" or "stopped" from
+// supervisor.running, or null before the first answer and while the server does
+// not answer. renderControls offers Start or Stop from it, and neither for null.
+let systemState = null;
+
+// refocusControl: the pressed button had the keyboard focus. It is hidden or
+// disabled while the action runs, so the control that replaces it gets the focus.
+let refocusControl = false;
+
+// ACTION_EXPECTATION is what each action takes through this page, rounded up
+// generously. Measured on 2026-10-28 (POST /api/control on a sandbox, no camera
+// recording): start 0.52 to 0.54 s, stop 0.01 s; the cutover on the real system
+// with six cameras recorded "RECORDING ... after 1.6 s" for up --detach.
 //
-// Up to about a minute, which is long enough that an indicator which does not
-// visibly change reads as a hung page - the Operator reported exactly that. So
-// the elapsed seconds tick, on the pressed button and beside it, and the page
-// says how long this particular action usually takes.
+// The elapsed seconds tick, on the pressed button and beside it, so even a slow
+// action never reads as a hung page.
 //
 // There is deliberately no progress bar. Nothing here can know what fraction
 // of a start is done, and a bar stalled at 80% is a worse lie than an honest
 // counter.
 const ACTION_EXPECTATION = {
-  "start:all": { seconds: 52.1, usual: "usually takes up to a minute" },
-  "stop:all": { seconds: 17.3, usual: "usually takes about 20 seconds" },
-  "start:recorder": { seconds: 27.3, usual: "usually takes about half a minute" },
-  "stop:recorder": { seconds: 19.7, usual: "usually takes about 20 seconds" },
-  "start:dashboard": { seconds: 12.5, usual: "usually takes about 15 seconds" },
-  "stop:dashboard": { seconds: 15.2, usual: "usually takes about 15 seconds" },
+  "start:all": { seconds: 10, usual: "usually takes a few seconds" },
+  "stop:all": { seconds: 10, usual: "usually takes a few seconds" },
 };
 
 // ACTION_CEILING_SECONDS mirrors controlTimeout in internal/web/control.go. Past it the
@@ -122,8 +128,14 @@ const ACTION_CEILING_SECONDS = 180;
 const busySeconds = () => (busyControl ? Math.floor((Date.now() - busyControl.startedAt) / 1000) : 0);
 
 function renderControls() {
-  for (const button of el("controls").querySelectorAll("button")) {
+  const controls = el("controls");
+  const hadFocus = refocusControl || controls.contains(document.activeElement);
+  const fitting = systemState === "running" ? "stop" : systemState === "stopped" ? "start" : null;
+  let shown = null;
+  for (const button of controls.querySelectorAll("button")) {
     const mine = busyControl && button.dataset.scope === busyControl.scope && button.dataset.action === busyControl.action;
+    button.hidden = busyControl ? !mine : button.dataset.action !== fitting;
+    if (!button.hidden) shown = button;
     if (mine) {
       button.setAttribute("aria-busy", "true");
       button.textContent = (busyControl.action === "start" ? "Starting… " : "Stopping… ") + busySeconds() + "s";
@@ -133,6 +145,11 @@ function renderControls() {
       button.textContent = button.dataset.label;
       button.disabled = anyBusy();
     }
+  }
+  el("controlsChecking").hidden = shown !== null || last !== null;
+  if (hadFocus && shown && !shown.disabled && document.activeElement !== shown) {
+    shown.focus();
+    refocusControl = false;
   }
 }
 
@@ -232,6 +249,7 @@ function render(payload, fetchError) {
 
   // The one liveness test. Not status.State.
   const live = !!supervisor.running;
+  systemState = fetchError || !payload ? null : live ? "running" : "stopped";
   const stale = !!status && supervisor.state === "running" && !live;
 
   // ---- feed indicator ----
@@ -510,17 +528,22 @@ async function runControl(scope, action) {
   if (viewOnly) return;
   if (anyBusy()) return;
 
-  // Stopping the recorder, or everything, stops footage being written.
-  // Stopping the viewers does not.
-  if (action === "stop" && (scope === "all" || scope === "recorder")) {
+  refocusControl = el("controls").contains(document.activeElement);
+
+  // A stop ends recording, and under holocron up it ends this web app too: the
+  // host stops it with the supervisor (internal/host).
+  if (action === "stop") {
     const ok = await confirmAction({
-      title: scope === "all" ? "Stop everything?" : "Stop the recorder?",
-      body: scope === "all"
-        ? "The recorder, the relay and the viewers all stop. No footage is captured from any camera until you start it again."
-        : "The recorder and the relay stop. No footage is captured from any camera until you start it again.",
-      go: scope === "all" ? "Stop everything" : "Stop the recorder",
+      title: "Stop everything?",
+      body: "Every camera stops recording, and the relay and live view stop with them. " +
+        "When Holocron was started with holocron up (the usual way), this page stops too, and Holocron " +
+        "has to be started again with holocron up. No footage is captured until then.",
+      go: "Stop everything",
     });
-    if (!ok) return;
+    if (!ok) {
+      refocusControl = false;
+      return;
+    }
   }
 
   // The progress region replaces the previous toast: the toast said "this
@@ -546,14 +569,17 @@ async function runControl(scope, action) {
     // decides liveness from the supervisor's own process.
     await poll();
     const took = (payload.durationMs / 1000).toFixed(1) + "s";
-    const running = !!(last && last.supervisor && last.supervisor.running);
-    const touchesRecorder = scope === "all" || scope === "recorder";
-    if (touchesRecorder && action === "start" && !running) {
+    const running = systemState === "running";
+    if (systemState === null) {
+      toast("warn", verb + " " + SCOPE_LABEL[scope] + " finished in " + took + ", and then this page lost the web app" +
+        (action === "stop" ? ": it stops with the rest when holocron up started it. Start Holocron again with holocron up." : "."),
+        payload.output);
+    } else if (action === "start" && !running) {
       toast("warn", verb + " " + SCOPE_LABEL[scope] + " ran for " + took +
         " and returned success, but the recorder is still not running: " +
         ((last && last.supervisor && last.supervisor.reason) || "no status") +
         ". Nothing is being captured.", payload.output);
-    } else if (touchesRecorder && action === "stop" && running) {
+    } else if (action === "stop" && running) {
       toast("warn", verb + " " + SCOPE_LABEL[scope] + " ran for " + took +
         " and returned success, but the recorder is still running.", payload.output);
     } else {
@@ -567,6 +593,7 @@ async function runControl(scope, action) {
     renderProgress();
     renderControls();
     await poll();
+    refocusControl = false;
   }
 }
 
