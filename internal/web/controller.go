@@ -275,6 +275,15 @@ func (a *API) controller() Controller {
 	return api
 }
 
+// expireController makes the next request ask the endpoint again. A start or a stop changes the
+// answer: without this, a Start pressed within controllerTTL of a Stop was refused as "the
+// supervisor is already running".
+func (a *API) expireController() {
+	a.pickMu.Lock()
+	a.pickedAt = time.Time{}
+	a.pickMu.Unlock()
+}
+
 func describeChoice(err error) string {
 	if err == nil {
 		return "the supervisor's control endpoint answers"

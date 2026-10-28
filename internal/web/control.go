@@ -105,6 +105,7 @@ func (a *API) handleControl(w http.ResponseWriter, r *http.Request) {
 	} else {
 		result = ctlr.Stop(actionCtx(r), scope)
 	}
+	a.expireController()
 	writeJSON(w, actionStatus(result), ActionResponse{
 		Ok:         result.Err == nil && result.ExitCode == 0,
 		Action:     action,

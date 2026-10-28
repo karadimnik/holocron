@@ -27,7 +27,7 @@ view-only gate on the TLS listener, the WHEP exception, certificate handling) wa
 
 `APIController` uses `ctlapi.Dial(root)`:
 `GET /v1/state` (Status, task chips), `POST /v1/stop`, `POST /v1/cameras/{name}/record`, with the request's actor and action id
-in the headers. The choice is made per request and cached for 5 s: the API controller when `<root>/_state/ctl.addr` answers within
+in the headers. The choice is made per request and cached for 5 s (a start or a stop through `POST /api/control` expires it, so a Start right after a Stop is not refused as "already running"): the API controller when `<root>/_state/ctl.addr` answers within
 1 s, the API controller in its "stopped" form when it does not (Start runs `<holocron> up --detach` when
 `Launch` is set, otherwise answers 409 "start it with holocron up"; Stop and the record toggle answer 409).
 `GET /api/status` reports the choice in `controller`. In the Go system `PUT /api/cameras` and `PUT /api/config` go to `Options.Settings` (a `SettingsWriter`: the holocron web role

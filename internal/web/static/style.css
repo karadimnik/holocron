@@ -166,7 +166,7 @@ footer.note{margin-top:22px;color:var(--ink-3);font-size:12px;border-top:1px sol
 .formnote.good{color:#9ad39a}
 
 /* ---- pending: an action takes up to a minute, so it must never look frozen ---- */
-.btn[aria-busy="true"]{position:relative;color:var(--ink-3);font-variant-numeric:tabular-nums}
+.btn[aria-busy="true"]{position:relative;overflow:hidden;color:var(--ink-3);font-variant-numeric:tabular-nums}
 .btn[aria-busy="true"]::after{content:"";position:absolute;inset:auto 8px 6px 8px;height:2px;
   background:linear-gradient(90deg,transparent,var(--accent),transparent);
   animation:sweep 1.1s linear infinite}

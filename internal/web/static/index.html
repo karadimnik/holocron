@@ -47,13 +47,11 @@
     <div id="banner"></div>
     <div id="stopNotice"></div>
 
-    <div class="actions" id="controls">
-      <button class="btn primary" data-action="start" data-scope="all">Start everything</button>
-      <button class="btn danger" data-action="stop" data-scope="all">Stop everything</button>
-      <button class="btn" data-action="start" data-scope="recorder">Start recorder</button>
-      <button class="btn danger" data-action="stop" data-scope="recorder">Stop recorder</button>
-      <button class="btn" data-action="start" data-scope="dashboard">Start viewers</button>
-      <button class="btn" data-action="stop" data-scope="dashboard">Stop viewers</button>
+    <!-- Only the control that fits the state is shown (renderControls). -->
+    <div class="actions" id="controls" role="group" aria-label="Start or stop Holocron">
+      <span class="muted" id="controlsChecking">Checking whether Holocron is running…</span>
+      <button class="btn primary" data-action="start" data-scope="all" hidden>Start everything</button>
+      <button class="btn danger" data-action="stop" data-scope="all" hidden>Stop everything</button>
     </div>
 
     <div class="stats" id="stats"></div>
