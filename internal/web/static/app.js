@@ -10,12 +10,14 @@
 //     the server decides from the supervisor's PROCESS, never from
 //     status.json's State field. Closing the NVR window runs no cleanup, so the
 //     file can say "running" with a pid that has gone.
-//   - Only the control that fits the state is shown: Stop while the supervisor
-//     runs, Start while it does not, neither while the state is unknown. The
-//     button that was pressed stays visible and busy until the action ends, and
-//     polling carries on, so the page can never look frozen or let a second
-//     action race the first.
-//   - Anything that stops footage being recorded asks first.
+//   - The Dashboard shows state, not commands. Its top answers "is Holocron
+//     recording, and does anything need me?" (renderSummary). It offers no
+//     command it cannot carry out: under holocron up a stop ends this page too,
+//     so Stop lives in Admin > System behind a typed confirmation, and Start is
+//     offered only while the supervisor is not running (this page is then
+//     served by holocron web on its own), to an admin. A pressed button stays
+//     busy with its seconds ticking until the action ends, and polling carries
+//     on, so the page never looks frozen or lets a second action race the first.
 
 const POLL_MS = 5000;
 
@@ -93,16 +95,12 @@ const busyCameras = new Set(); // camera names whose record toggle is in flight
 
 const anyBusy = () => busyControl !== null || busyCameras.size > 0;
 
-const SCOPE_LABEL = { all: "everything" };
+const SCOPE_LABEL = { all: "Holocron" };
 
 // systemState is what the last poll said: "running" or "stopped" from
 // supervisor.running, or null before the first answer and while the server does
-// not answer. renderControls offers Start or Stop from it, and neither for null.
+// not answer. The standalone notice and its Start are shown for "stopped" only.
 let systemState = null;
-
-// refocusControl: the pressed button had the keyboard focus. It is hidden or
-// disabled while the action runs, so the control that replaces it gets the focus.
-let refocusControl = false;
 
 // ACTION_EXPECTATION is what each action takes through this page, rounded up
 // generously. Measured on 2026-10-28 (POST /api/control on a sandbox, no camera
@@ -127,30 +125,21 @@ const ACTION_CEILING_SECONDS = 180;
 
 const busySeconds = () => (busyControl ? Math.floor((Date.now() - busyControl.startedAt) / 1000) : 0);
 
-function renderControls() {
-  const controls = el("controls");
-  const hadFocus = refocusControl || controls.contains(document.activeElement);
-  const fitting = systemState === "running" ? "stop" : systemState === "stopped" ? "start" : null;
-  let shown = null;
-  for (const button of controls.querySelectorAll("button")) {
-    const mine = busyControl && button.dataset.scope === busyControl.scope && button.dataset.action === busyControl.action;
-    button.hidden = busyControl ? !mine : button.dataset.action !== fitting;
-    if (!button.hidden) shown = button;
-    if (mine) {
-      button.setAttribute("aria-busy", "true");
-      button.textContent = (busyControl.action === "start" ? "Starting… " : "Stopping… ") + busySeconds() + "s";
-      button.disabled = true;
-    } else {
-      button.removeAttribute("aria-busy");
-      button.textContent = button.dataset.label;
-      button.disabled = anyBusy();
-    }
+// renderStandalone shows the "not running" notice while the supervisor is not
+// running (or a Start is in flight), with its Start button for an admin only.
+function renderStandalone() {
+  const starting = busyControl !== null && busyControl.action === "start";
+  el("standalone").hidden = systemState !== "stopped" && !starting;
+  const button = el("startHolocron");
+  button.hidden = viewOnly;
+  if (starting) {
+    button.setAttribute("aria-busy", "true");
+    button.textContent = "Starting… " + busySeconds() + "s";
+  } else {
+    button.removeAttribute("aria-busy");
+    button.textContent = "Start Holocron";
   }
-  el("controlsChecking").hidden = shown !== null || last !== null;
-  if (hadFocus && shown && !shown.disabled && document.activeElement !== shown) {
-    shown.focus();
-    refocusControl = false;
-  }
+  button.disabled = anyBusy();
 }
 
 // renderProgress says what is running, for how long it has been running, and
@@ -188,7 +177,7 @@ function renderProgress() {
 function startBusyTicker() {
   stopBusyTicker();
   busyTicker = setInterval(() => {
-    renderControls();
+    renderStandalone();
     renderProgress();
   }, 1000);
 }
@@ -234,7 +223,7 @@ function cameraDetail(cam, live) {
 
 function toggle(cam, live) {
   const pending = busyCameras.has(cam.Name);
-  return '<div class="tglwrap"><button class="tgl" aria-checked="' + !!cam.Record +
+  return '<div class="tglwrap"><button class="tgl" role="switch" aria-checked="' + !!cam.Record +
     '" aria-label="Record ' + esc(cam.Name) + '" data-camera="' + esc(cam.Name) + '"' +
     (pending || anyBusy() ? " disabled" : "") + "><i></i></button><span>" +
     (pending ? "…" : cam.Record ? "On" : "Off") + "</span></div>";
@@ -267,34 +256,60 @@ function render(payload, fetchError) {
     el("feedWhen").textContent = "updated " + shortAge(file.ageSeconds) + " ago";
   }
 
-  // ---- banner ----
+  // ---- summary: the verdict, then what needs attention ----
   const enabled = cams.filter((c) => c.Record).length;
   const recording = live ? cams.filter((c) => c.Record && c.Alive).length : 0;
-  const unreachable = live ? cams.filter((c) => c.Record && !c.Alive) : [];
+  const notRecording = live ? cams.filter((c) => c.Record && !c.Alive) : [];
+  const switchedOff = cams.length - enabled;
   const reserve = typeof disk.ReserveGB === "number" ? disk.ReserveGB : 0;
   const atReserve = typeof disk.FreeGB === "number" && disk.FreeGB <= reserve + (disk.PruneHysteresisGB || 0);
+  const days = disk.ProjectedDaysRemaining;
+  const healthLink = viewOnly ? "" : ' <a href="#admin">Admin &gt; Health</a> has the details.';
+  const cameraLinks = (list) => list.map((c) =>
+    '<button type="button" class="linkish" data-goto="' + esc(c.Name) + '">' + esc(c.Name) + "</button>").join(", ");
+  const plural = (n, one, many) => n + " " + (n === 1 ? one : many);
 
-  let banner = "";
-  if (!status) {
-    banner = bannerHTML("crit", "No status to show.",
-      file.error || "The recorder has not written a status file.");
+  let summary;
+  if (fetchError) {
+    summary = summaryHTML("crit", "No connection", "This page cannot reach the web app.",
+      [esc(fetchError) + ". What is shown below is from the last answer and may be out of date; the page keeps trying every " + POLL_MS / 1000 + " s."]);
+  } else if (!status) {
+    summary = summaryHTML("crit", "No status", "Holocron's status is unknown.",
+      [esc(file.error || "The recorder has not written a status file.")]);
   } else if (stale) {
-    // The case State alone gets wrong, said out loud.
-    banner = bannerHTML("crit", "Nothing is recording.",
-      "The status file still says the recorder is running, but " + (supervisor.reason || "its process is gone") +
-      ". Nothing has been captured since it stopped.");
+    summary = summaryHTML("crit", "Not recording", "Holocron is not recording.",
+      ["The status file still says it is running, but " + esc(supervisor.reason || "its process is gone") +
+        ". Nothing has been captured since it stopped."]);
   } else if (!live) {
-    banner = bannerHTML("crit", "Nothing is recording.",
-      "The supervisor is stopped, so no footage is being captured.");
-  } else if (atReserve) {
-    banner = bannerHTML("warn", "Disk is at its reserve.",
-      "The pruner is deleting the oldest footage to keep " + num(reserve, 0) + " GB free.");
-  } else if (unreachable.length) {
-    banner = bannerHTML("warn",
-      unreachable.length + (unreachable.length === 1 ? " camera is" : " cameras are") + " not reachable.",
-      esc(unreachable.map((c) => c.Name).join(", ")) + ". They keep retrying; the others are unaffected.");
+    summary = summaryHTML("crit", "Not recording", "Holocron is not recording.",
+      ["The supervisor is not running, so no footage is being captured."]);
+  } else {
+    const details = [];
+    if (notRecording.length) {
+      details.push(cameraLinks(notRecording) + (notRecording.length === 1 ? " is" : " are") +
+        " not delivering footage and keeps retrying; the other cameras are unaffected.");
+    }
+    if (atReserve) {
+      details.push("The disk is at its reserve: the pruner is deleting the oldest footage to keep " + num(reserve, 0) + " GB free." + healthLink);
+    } else if (typeof days === "number" && days < 4) {
+      details.push("About " + num(days) + " days of footage headroom are left." + healthLink);
+    }
+    const off = switchedOff > 0 ? [plural(switchedOff, "camera is", "cameras are") + " switched off."] : [];
+    if (enabled === 0) {
+      summary = summaryHTML("warn", "Needs attention", "No camera is set to record.",
+        ["Switch recording on for a camera below."].concat(details));
+    } else if (notRecording.length) {
+      summary = summaryHTML(recording === 0 ? "crit" : "warn", recording === 0 ? "Not recording" : "Needs attention",
+        notRecording.length + " of " + plural(enabled, "camera", "cameras") + (notRecording.length === 1 ? " is" : " are") + " not recording.",
+        details.concat(off));
+    } else if (details.length) {
+      summary = summaryHTML("warn", "Needs attention", "Recording " + recording + " of " + plural(enabled, "camera", "cameras") + ".", details.concat(off));
+    } else {
+      summary = summaryHTML("good", "All good", "Recording " + recording + " of " + plural(enabled, "camera", "cameras") + ".",
+        ["Nothing needs attention."].concat(off));
+    }
   }
-  el("banner").innerHTML = banner;
+  renderSummary(summary);
 
   // ---- persistent notices, shown whether or not they are current ----
   // A crash the UI does not mention is a crash nobody finds out about, so these
@@ -323,7 +338,6 @@ function render(payload, fetchError) {
   el("stopNotice").innerHTML = notices.join("");
 
   // ---- stat tiles: exactly ONE hero figure ----
-  const days = disk.ProjectedDaysRemaining;
   const free = disk.FreeGB;
   const archive = disk.ArchiveGB;
   const usable = (free || 0) + (archive || 0) - reserve;
@@ -342,16 +356,13 @@ function render(payload, fetchError) {
     '<span class="unit"> GB</span></div><div class="sub">' + num(reserve, 0) + " GB reserved</div></div>" +
 
     '<div class="tile"><div class="lab">Archive</div><div class="val">' + num(archive) +
-    '<span class="unit"> GB</span></div><div class="sub">' + (disk.ArchiveFiles || 0) + " segments</div></div>" +
-
-    '<div class="tile"><div class="lab">Recording</div><div class="val">' + recording + " / " + enabled +
-    '</div><div class="sub">' + enabled + " of " + cams.length + " cameras enabled</div></div>";
+    '<span class="unit"> GB</span></div><div class="sub">' + (disk.ArchiveFiles || 0) + " segments</div></div>";
 
   el("recCount").textContent = recording + " of " + enabled + " recording";
 
   // ---- layout A: table ----
   el("tbody").innerHTML = cams.map((cam) =>
-    "<tr>" +
+    '<tr data-cam="' + esc(cam.Name) + '">' +
     '<td><div class="cam-name">' + esc(cam.Name) + "</div>" + cameraDetail(cam, live) + "</td>" +
     "<td>" + cameraChip(cam, live) + "</td>" +
     "<td>" + inputChip(cam, live) + "</td>" +
@@ -368,7 +379,7 @@ function render(payload, fetchError) {
         : cam.LastError
           ? esc(cam.LastError)
           : esc(cam.InputMode) + " &middot; " + age(cam.SecondsSinceLastClosedSegment) + " &middot; " + num(gb(cam.ArchiveBytes)) + " GB";
-    return '<div class="crow"><div class="main"><div class="nm">' + esc(cam.Name) + "</div>" +
+    return '<div class="crow" data-cam="' + esc(cam.Name) + '"><div class="main"><div class="nm">' + esc(cam.Name) + "</div>" +
       '<div class="sb">' + sub + "</div></div>" + cameraChip(cam, live) + toggle(cam, live) + "</div>";
   }).join("");
 
@@ -408,7 +419,40 @@ function render(payload, fetchError) {
   // first poll had returned left the field permanently blank.
   if (status && status.RootPath) el("archiveRoot").value = status.RootPath;
 
-  renderControls();
+  renderStandalone();
+}
+
+// The verdict carries an icon AND a word, never colour alone (WCAG 1.4.1).
+const VERDICT_ICON = {
+  good: '<path d="M6 10.5l2.5 2.5L14 7.5"/><circle cx="10" cy="10" r="8.5"/>',
+  warn: '<path d="M10 2.2L18.6 17.5H1.4Z" stroke-linejoin="round"/><path d="M10 8v4.2M10 14.6v.4"/>',
+  crit: '<circle cx="10" cy="10" r="8.5"/><path d="M7 7l6 6M13 7l-6 6"/>',
+};
+
+function summaryHTML(cls, verdict, headline, details) {
+  return '<div class="scard ' + cls + '"><div class="verdict"><svg viewBox="0 0 20 20" width="20" height="20" aria-hidden="true" focusable="false" ' +
+    'fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">' + VERDICT_ICON[cls] + "</svg><span>" + esc(verdict) + "</span></div>" +
+    '<div class="stext"><p class="headline">' + esc(headline) + "</p>" +
+    (details.length ? '<ul class="sdetail">' + details.map((d) => "<li>" + d + "</li>").join("") + "</ul>" : "") + "</div></div>";
+}
+
+// renderSummary rewrites the live region only when its words change: a region
+// rewritten on every poll would be read out every 5 s (WCAG 4.1.3).
+let summaryShown = "";
+function renderSummary(html) {
+  if (html === summaryShown) return;
+  summaryShown = html;
+  el("summary").innerHTML = html;
+}
+
+// goToCamera scrolls to a camera's row in whichever layout is on screen and
+// puts the keyboard focus on its record switch.
+function goToCamera(name) {
+  const row = [...document.querySelectorAll("[data-cam]")].find((n) => n.dataset.cam === name && n.offsetParent !== null);
+  if (!row) return;
+  row.scrollIntoView({ block: "center" });
+  const target = row.querySelector(".tgl");
+  if (target) target.focus({ preventScroll: true });
 }
 
 function bannerHTML(cls, title, body, trailing) {
@@ -524,34 +568,19 @@ async function sendJSON(method, path, body) {
   return { ok: response.ok, status: response.status, payload };
 }
 
+// runControl runs one start or stop through POST /api/control, shows the seconds
+// while it runs, and reads the outcome back from the status endpoint. It asks
+// nothing itself: the one guarded action, Stop in Admin > System, asks first.
 async function runControl(scope, action) {
   if (viewOnly) return;
   if (anyBusy()) return;
-
-  refocusControl = el("controls").contains(document.activeElement);
-
-  // A stop ends recording, and under holocron up it ends this web app too: the
-  // host stops it with the supervisor (internal/host).
-  if (action === "stop") {
-    const ok = await confirmAction({
-      title: "Stop everything?",
-      body: "Every camera stops recording, and the relay and live view stop with them. " +
-        "When Holocron was started with holocron up (the usual way), this page stops too, and Holocron " +
-        "has to be started again with holocron up. No footage is captured until then.",
-      go: "Stop everything",
-    });
-    if (!ok) {
-      refocusControl = false;
-      return;
-    }
-  }
 
   // The progress region replaces the previous toast: the toast said "this
   // takes a few seconds" for an action measured at 52, and never changed once
   // it was on screen.
   busyControl = { scope, action, startedAt: Date.now() };
   el("toast").innerHTML = "";
-  renderControls();
+  renderStandalone();
   renderProgress();
   startBusyTicker();
 
@@ -571,9 +600,7 @@ async function runControl(scope, action) {
     const took = (payload.durationMs / 1000).toFixed(1) + "s";
     const running = systemState === "running";
     if (systemState === null) {
-      toast("warn", verb + " " + SCOPE_LABEL[scope] + " finished in " + took + ", and then this page lost the web app" +
-        (action === "stop" ? ": it stops with the rest when holocron up started it. Start Holocron again with holocron up." : "."),
-        payload.output);
+      toast("warn", verb + " " + SCOPE_LABEL[scope] + " finished in " + took + ", and then this page lost the web app.", payload.output);
     } else if (action === "start" && !running) {
       toast("warn", verb + " " + SCOPE_LABEL[scope] + " ran for " + took +
         " and returned success, but the recorder is still not running: " +
@@ -591,9 +618,8 @@ async function runControl(scope, action) {
     busyControl = null;
     stopBusyTicker();
     renderProgress();
-    renderControls();
+    renderStandalone();
     await poll();
-    refocusControl = false;
   }
 }
 
@@ -1151,14 +1177,17 @@ function renderFootagePlayer() {
 // Wiring
 // ---------------------------------------------------------------------------
 
-for (const button of el("controls").querySelectorAll("button")) {
-  button.dataset.label = button.textContent;
-  button.onclick = () => runControl(button.dataset.scope, button.dataset.action);
-}
+el("startHolocron").onclick = () => runControl("all", "start");
 
 // Both camera layouts and both screens are rendered from innerHTML, so the
 // handlers are delegated rather than attached per element.
 document.addEventListener("click", (event) => {
+  const goto = event.target.closest("#summary [data-goto]");
+  if (goto) {
+    goToCamera(goto.dataset.goto);
+    return;
+  }
+
   const dismiss = event.target.closest("#stopNotice [data-ack]");
   if (dismiss && !dismiss.disabled) {
     acknowledgeNotice(dismiss);

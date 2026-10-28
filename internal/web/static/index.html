@@ -10,7 +10,7 @@
 <body>
 <div class="app">
 
-  <div class="top">
+  <header class="top">
     <div class="brand">IPCCTV <span>/ control</span></div>
     <nav class="tabs" id="tabs">
       <button data-t="dash" aria-current="page">Dashboard</button>
@@ -29,29 +29,37 @@
       <span class="when hide" id="who"></span>
       <button class="btn hide" id="signOut" type="button">Sign out</button>
     </div>
-  </div>
+  </header>
 
   <!-- Shown only on the HTTPS LAN listener in view-only mode (see detectViewOnly in app.js). -->
   <div id="viewOnly" class="viewonly-note hide"><strong>This address is view-only.</strong> You can watch the cameras and browse footage, but not start, stop or change anything. Use the PC itself for that.</div>
   <!-- Shown to a signed-in viewer (detectAccess in app.js); the server refuses a viewer everything else anyway. -->
   <div id="viewerNote" class="viewonly-note hide"><strong>You are signed in as a viewer.</strong> You can watch the cameras and browse footage. Starting, stopping, recording and settings are for admins.</div>
 
-  <div id="toast"></div>
+  <main id="main">
+  <!-- What the last action did (toast in app.js); polite, so a result is read without moving the focus. -->
+  <div id="toast" role="status" aria-live="polite"></div>
   <!-- What is running right now, with the seconds ticking. Filled by
        renderProgress while an action is in flight. -->
   <div id="progress"></div>
 
   <!-- ============== DASHBOARD ============== -->
-  <section data-tab="dash">
+  <section data-tab="dash" aria-labelledby="dashHeading">
+    <h1 class="sr-only" id="dashHeading">Dashboard</h1>
 
-    <div id="banner"></div>
+    <!-- The answer to "is Holocron recording, and does anything need me?", built from GET /api/status
+         alone (renderSummary in app.js). It is rewritten only when its words change, so the polite
+         live region speaks once per change, not on every poll. -->
+    <div id="summary" role="status" aria-live="polite" aria-atomic="true"><div class="scard"><p class="headline">Checking whether Holocron is recording…</p></div></div>
     <div id="stopNotice"></div>
 
-    <!-- Only the control that fits the state is shown (renderControls). -->
-    <div class="actions" id="controls" role="group" aria-label="Start or stop Holocron">
-      <span class="muted" id="controlsChecking">Checking whether Holocron is running…</span>
-      <button class="btn primary" data-action="start" data-scope="all" hidden>Start everything</button>
-      <button class="btn danger" data-action="stop" data-scope="all" hidden>Stop everything</button>
+    <!-- Only while the supervisor is not running, which is when this page is served by holocron web
+         on its own: under holocron up the page stops with the rest, so it never offers a Start there.
+         The button is an admin's (renderStandalone). -->
+    <div id="standalone" class="notice" hidden>
+      <div><b>Holocron is not running.</b> This page is served by the web app on its own, so nothing is recorded.
+        Start Holocron on the PC with <code>holocron up --detach</code>.</div>
+      <button class="btn primary" id="startHolocron" type="button" hidden>Start Holocron</button>
     </div>
 
     <div class="stats" id="stats"></div>
@@ -80,8 +88,8 @@
 
     <footer class="note">
       Status is read from <code>status.json</code> and whether the recorder is up is decided by its
-      process, not by what the file last said. Actions go through the supervisor's control API;
-      Start runs <code>holocron up --detach</code>.
+      process, not by what the file last said. Record switches go through the supervisor's control API;
+      reloading and stopping Holocron are in Admin &gt; System.
       No camera credential ever reaches this page.
     </footer>
   </section>
@@ -256,6 +264,7 @@
       </dialog>
     </div>
   </section>
+  </main>
 </div>
 
 <!-- Confirmation for anything that stops footage being recorded, and for every destructive Admin action. -->

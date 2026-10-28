@@ -300,32 +300,41 @@ func TestControllerAPITaskStates(t *testing.T) {
 	}
 }
 
-// The Dashboard offers one control at a time (app.js renderControls): the markup holds exactly a
-// Start and a Stop of scope all, both hidden until the first status says which one fits, inside a
-// named group. The viewers and recorder buttons of the old system are gone.
-func TestDashboardControlsMarkup(t *testing.T) {
+// The Dashboard shows state, not commands (D24): no Start/Stop-everything row; its top is a polite
+// status region; the only button in its markup is the standalone Start, hidden until a status says
+// the supervisor is not running, and never shown to a viewer (app.js renderStandalone).
+func TestDashboardShowsStateNotCommands(t *testing.T) {
 	page, err := staticFiles.ReadFile("static/index.html")
 	if err != nil {
 		t.Fatal(err)
 	}
-	region := regexp.MustCompile(`(?s)<div class="actions" id="controls"([^>]*)>(.*?)</div>`).FindSubmatch(page)
-	if region == nil {
-		t.Fatal("no #controls region in index.html")
+	for _, gone := range []string{`id="controls"`, "Start everything", "Stop everything", `data-action="stop"`} {
+		if strings.Contains(string(page), gone) {
+			t.Errorf("index.html still has %s", gone)
+		}
 	}
-	if !strings.Contains(string(region[1]), `role="group"`) || !strings.Contains(string(region[1]), `aria-label="`) {
-		t.Errorf("the control region has no accessible name: %s", region[1])
+	dash := regexp.MustCompile(`(?s)<section data-tab="dash"[^>]*>(.*?)</section>`).FindSubmatch(page)
+	if dash == nil {
+		t.Fatal("no Dashboard section in index.html")
 	}
-	buttons := regexp.MustCompile(`<button[^>]*>[^<]*</button>`).FindAllString(string(region[2]), -1)
-	want := []string{
-		`<button class="btn primary" data-action="start" data-scope="all" hidden>Start everything</button>`,
-		`<button class="btn danger" data-action="stop" data-scope="all" hidden>Stop everything</button>`,
+	if !strings.Contains(string(dash[1]), `<div id="summary" role="status" aria-live="polite" aria-atomic="true">`) {
+		t.Error("the Dashboard has no polite status summary")
 	}
-	if strings.Join(buttons, "\n") != strings.Join(want, "\n") {
-		t.Errorf("control buttons:\n%s\nwant:\n%s", strings.Join(buttons, "\n"), strings.Join(want, "\n"))
+	if i, j := strings.Index(string(dash[1]), `id="summary"`), strings.Index(string(dash[1]), `id="stats"`); i < 0 || j < i {
+		t.Error("the status summary is not above the figures")
+	}
+	buttons := regexp.MustCompile(`<button[^>]*>[^<]*</button>`).FindAllString(string(dash[1]), -1)
+	if want := `<button class="btn primary" id="startHolocron" type="button" hidden>Start Holocron</button>`; strings.Join(buttons, "\n") != want {
+		t.Errorf("Dashboard buttons:\n%s\nwant:\n%s", strings.Join(buttons, "\n"), want)
 	}
 	app, err := staticFiles.ReadFile("static/app.js")
 	if err != nil {
 		t.Fatal(err)
+	}
+	for _, rule := range []string{`el("standalone").hidden = systemState !== "stopped" && !starting;`, `button.hidden = viewOnly;`} {
+		if !strings.Contains(string(app), rule) {
+			t.Errorf("app.js lost the rule %s", rule)
+		}
 	}
 	keys := regexp.MustCompile(`"((?:start|stop):\w+)": \{ seconds:`).FindAllStringSubmatch(string(app), -1)
 	if len(keys) != 2 || keys[0][1] != "start:all" || keys[1][1] != "stop:all" {
