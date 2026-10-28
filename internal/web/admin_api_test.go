@@ -558,3 +558,31 @@ func TestAdminJSHealthSectionHooks(t *testing.T) {
 		t.Error("an inline event attribute in admin.js")
 	}
 }
+
+// POST /api/admin/reload is an audited admin action: a viewer is refused, an admin with no supervisor
+// runs it (the 409 without a supervisor is TestControllerStoppedWithNoSupervisor), and both leave a
+// record in the audit stream.
+func TestAdminReloadIsAuditedAndAdminOnly(t *testing.T) {
+	a := newAdminRig(t)
+	a.addViewer(t)
+	viewer := a.loginAs(t, viewerUser, viewerPassword)
+	if rec := a.as(viewer).call("POST", "/api/admin/reload", `{}`); !isAdminRefusal(rec) {
+		t.Errorf("viewer reload: %d %s", rec.Code, rec.Body.String())
+	}
+	rec := a.call("POST", "/api/admin/reload", `{}`)
+	if rec.Code != 200 || decode(t, rec)["ok"] != true {
+		t.Errorf("admin reload: %d %s", rec.Code, rec.Body.String())
+	}
+	var result, denied bool
+	for _, l := range a.logs.audit.Lines() {
+		if strings.Contains(l, ActionAdminReload) && strings.Contains(l, "action.result") && strings.Contains(l, "actor=web:"+testUser) {
+			result = true
+		}
+		if strings.Contains(l, "access.denied") && strings.Contains(l, "/api/admin/reload") {
+			denied = true
+		}
+	}
+	if !result || !denied {
+		t.Errorf("audit stream: result %v, denied %v\n%s", result, denied, strings.Join(a.logs.audit.Lines(), "\n"))
+	}
+}

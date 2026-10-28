@@ -46,6 +46,7 @@ const (
 	ActionAdminAutostart    = "web.admin.autostart.status"
 	ActionAdminAutostartSet = "web.admin.autostart.set"
 	ActionAdminHealth       = "web.admin.health"
+	ActionAdminReload       = "web.admin.reload"
 )
 
 // adminActions: name, mutating, audited read.
@@ -61,6 +62,7 @@ var adminActions = []struct {
 	{ActionAdminPrune, false, false}, {ActionAdminArchive, false, false},
 	{ActionAdminLogLevels, false, false}, {ActionAdminLogLevel, true, true},
 	{ActionAdminAutostart, false, true}, {ActionAdminAutostartSet, true, true},
+	{ActionAdminReload, true, true},
 	{ActionAdminHealth, false, false}, // read-only and polled: its records stay at DEBUG, out of the audit stream
 }
 
@@ -156,6 +158,7 @@ func (a *API) adminRoutes(mux *http.ServeMux) {
 	handleAction(mux, a.runner, "GET /api/admin/autostart", ActionAdminAutostart, a.handleAdminAutostart)
 	handleAction(mux, a.runner, "POST /api/admin/autostart", ActionAdminAutostartSet, a.handleAdminAutostartSet)
 	handleAction(mux, a.runner, "GET /api/admin/health", ActionAdminHealth, a.handleAdminHealth)
+	handleAction(mux, a.runner, "POST /api/admin/reload", ActionAdminReload, a.handleAdminReload)
 }
 
 // adminFailed answers an error of a helper with its status and its own words.
@@ -539,6 +542,22 @@ func (a *API) handleAdminTLSRotate(w http.ResponseWriter, r *http.Request) {
 // ---------------------------------------------------------------------------
 // Maintenance and autostart
 // ---------------------------------------------------------------------------
+
+// handleAdminReload asks the supervisor to re-read cameras.json and the configuration now
+// (POST /v1/reload); 409 when it is not running or another action holds the lock.
+func (a *API) handleAdminReload(w http.ResponseWriter, r *http.Request) {
+	unlock, ok := a.exclusive(w)
+	if !ok {
+		return
+	}
+	defer unlock()
+	result := a.controller().Reload(actionCtx(r))
+	if result.Err != nil || result.ExitCode != 0 {
+		writeAPIError(w, actionStatus(result), errorText(result))
+		return
+	}
+	adminDone(w, "Reloaded cameras.json and the configuration.", map[string]any{"durationMs": result.Duration.Milliseconds()})
+}
 
 // adminRead answers one of the AdminTools reports.
 func (a *API) adminRead(w http.ResponseWriter, r *http.Request, key string, read func(AdminTools, context.Context) (any, error)) {

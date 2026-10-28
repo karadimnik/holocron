@@ -67,6 +67,7 @@ var roRoutes = []roRoute{
 	{"POST", "/api/admin/log/level", jsonHdr, `{"component":"all","level":"debug"}`, false},
 	{"GET", "/api/admin/autostart", nil, ``, false},
 	{"POST", "/api/admin/autostart", jsonHdr, `{"enabled":false}`, false},
+	{"POST", "/api/admin/reload", jsonHdr, `{}`, false},
 	// unknown routes and methods are refused too: deny by default
 	{"GET", "/api/nothing", nil, "", false}, {"GET", "/api/live/x", nil, "", false}, {"GET", "/api/tls/ca.key", nil, "", false},
 	{"POST", "/", jsonHdr, "{}", false}, {"PUT", "/", jsonHdr, "{}", false}, {"PATCH", "/api/config", jsonHdr, "{}", false},

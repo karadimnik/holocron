@@ -53,6 +53,8 @@ func newFakeSupervisor(t *testing.T, root string) *fakeSupervisor {
 		switch {
 		case r.URL.Path == "/v1/state":
 			io.WriteString(w, fmt.Sprintf(`{"ok":true,"data":{"running":%v,"pid":4242,"cameras":[{"name":"Front","record":true,"alive":true}]}}`, f.running))
+		case r.URL.Path == "/v1/reload":
+			io.WriteString(w, `{"ok":true}`)
 		case r.URL.Path == "/v1/stop":
 			io.WriteString(w, `{"ok":true,"data":{"kind":"requested","reason":"stop requested","survivors":[],"final":true}}`)
 		case strings.HasPrefix(r.URL.Path, "/v1/cameras/") && strings.HasSuffix(r.URL.Path, "/record"):
@@ -146,8 +148,12 @@ func TestControllerAPIWhenEndpointAnswers(t *testing.T) {
 	if code != 200 || body["ok"] != true || !strings.Contains(fmt.Sprint(body["output"]), "Front: record off") {
 		t.Fatalf("record: %d %v", code, body)
 	}
+	code, body = rig.post(t, "/api/admin/reload", `{}`)
+	if code != 200 || body["ok"] != true {
+		t.Fatalf("reload: %d %v", code, body)
+	}
 	calls := sup.callList()
-	if sup.count("POST /v1/stop") != 1 || sup.count(`POST /v1/cameras/Front/record {"enabled":false}`) != 1 {
+	if sup.count("POST /v1/stop") != 1 || sup.count(`POST /v1/cameras/Front/record {"enabled":false}`) != 1 || sup.count("POST /v1/reload") != 1 {
 		t.Errorf("calls %v", calls)
 	}
 	// the actor and the action id travel to the supervisor's records
@@ -194,6 +200,10 @@ func TestControllerAPIBusyIs409(t *testing.T) {
 	if code != http.StatusConflict || body["ok"] != false || !strings.Contains(fmt.Sprint(body["error"]), "another control action") {
 		t.Errorf("%d %v", code, body)
 	}
+	code, body = rig.post(t, "/api/admin/reload", `{}`)
+	if code != http.StatusConflict || body["ok"] != false || !strings.Contains(fmt.Sprint(body["error"]), "another control action") {
+		t.Errorf("reload: %d %v", code, body)
+	}
 }
 
 // The holocron web role with no supervisor: a clear message.
@@ -211,6 +221,9 @@ func TestControllerStoppedWithNoSupervisor(t *testing.T) {
 	}
 	if code, body = rig.post(t, "/api/cameras/Front/record", `{"enabled":false}`); code != http.StatusConflict || !strings.Contains(fmt.Sprint(body["error"]), "holocron cam") {
 		t.Errorf("record: %d %v", code, body)
+	}
+	if code, body = rig.post(t, "/api/admin/reload", `{}`); code != http.StatusConflict || body["ok"] != false || !strings.Contains(fmt.Sprint(body["error"]), "not running") {
+		t.Errorf("reload: %d %v", code, body)
 	}
 	// settings writes without a SettingsWriter are refused plainly
 	mux := http.NewServeMux()
