@@ -1,0 +1,17 @@
+# Normalise line endings so a rewrite of one file cannot produce a whole-file
+# diff. The repo is LF throughout; the .ps1 rule is for the scripts in tests/stress.
+*.ps1  text eol=lf
+*.psm1 text eol=lf
+*.yml  text eol=lf
+*.yaml text eol=lf
+*.json text eol=lf
+*.md   text eol=lf
+*.txt  text eol=lf
+.gitignore    text eol=lf
+.gitattributes text eol=lf
+
+# The committed screenshot is binary and must never be touched.
+*.png  binary
+
+# Golden files are compared byte for byte with the frozen PowerShell outputs: never normalise their line endings.
+testdata/golden/** -text

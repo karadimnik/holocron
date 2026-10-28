@@ -1,0 +1,60 @@
+# Holocron
+
+> Holocron is a Go network video recorder: one executable (`holocron`) records RTSP cameras with ffmpeg, supervises its own processes, serves a web app and alerts. It replaced the PowerShell system on 2026-10-22; that system was retired from this repository on 2026-10-28 and lives complete in the repository `windows-terminal-IPCCTV-dashboard` (branch `master`), the rollback target.
+
+Branch `main`. Rules for agents are in AGENTS.md. Facts in the documents below carry file paths; items marked UNVERIFIED have not been run.
+
+## Start here
+
+- [AGENTS.md](AGENTS.md): hard rules for any AI agent working in this repository (never touch the live system, no credential files, commit rules, how to run tests)
+- [Holocron for agents](docs/ai/holocron-for-agents.md): the full structured reference - architecture, package map, command registry, guarantees G1 to G15 and their tests, configuration, state files, access classes, per-OS process lifetime, testing, how to extend, limits, glossary
+- [Quickstart](docs/holocron-quickstart.md): four steps from nothing to a recording NVR, Windows first, then Linux and macOS
+- [Cheat sheet](docs/holocron-cheatsheet.md): commands by intent, files, ports, exit codes, alert ids, the ten likeliest problems, rollback in four lines
+
+## Operating
+
+- [Rollback](docs/rollback.md): a previous build, the flat archive layout (`holocron archive flatten`), and the Holocron side of going back to the PowerShell system
+- [Autostart](docs/autostart.md): `holocron install`, logon task, Windows service, systemd, launchd, Defender note
+- [The web app](docs/ui.md): screens, Live view, HTTPS on the LAN, users, roles, the Admin tab
+- [Alerts](docs/alerts.md): event ids and meanings
+- [Configuration](docs/configuration.md): the two files, where they live, the keys by area
+- [Troubleshooting](docs/troubleshooting.md): symptoms, the doctor lines and their fixes
+- [How it works](docs/how-it-works.md): recording, the relay, the mover, the pruner, autostart
+- [Known limitations](docs/limitations.md): measured or code-visible limits (two RTSP sessions per camera, GOP overshoot, Firefox and loopback media)
+- [Comparing two archives](docs/shadow.md): `holocron archive compare`, read-only on both roots
+- [Development](docs/development.md): building, testing, the documentation checks, golden files
+- [Continuous integration](docs/ci.md): what runs, how to run the same locally
+- [Cutover plan and record](tasks/holocron/cutover-plan.md): decisions, stop rules, the 22 Oct 2026 record and its findings; the step-by-step [cutover runbook](tasks/holocron/cutover-runbook.md) and [shadow runbook](tasks/holocron/shadow-runbook.md) are historical records
+
+## Design and decisions
+
+- [High-level design](tasks/holocron/os-independent-hld.md): rules R1 and R2, architecture, technology choices, decisions D2 to D20 (D20, spool and day folders, supersedes D18)
+- [Low-level design](tasks/holocron/os-independent-lld.md): per-package plan and the work items
+- [Supervisor inventory](tasks/holocron/spec/inventory-supervisor.md): the guarantees G1 to G15 and the status.json fields of the system Holocron reproduces
+- [Commission ledger](tasks/holocron/ledger.md): every merge into `main`
+- [Configuration keys](internal/config/KEYS.md): every `holocron.config.json` key, default, rule and whether `config set` may edit it
+
+## Code
+
+- [cmd/holocron](cmd/holocron/README.md): the command tree and exit codes
+- [internal/app](internal/app/README.md): production wiring, `up`, `down`, census
+- [internal/supervise](internal/supervise/README.md): the supervisor loop and per-camera manager
+- [internal/host](internal/host/README.md): restart budget, stop classification, guarantees to tests table
+- [internal/osx](internal/osx/README.md): per-OS process lifetime, lock, registry, console events
+- [internal/status](internal/status/README.md): the status.json contract
+- [internal/ctlapi](internal/ctlapi/README.md): the supervisor's control API
+- [internal/web](internal/web/README.md): web app, roles, access table, Admin tab
+- [internal/config](internal/config/README.md): configuration and cameras.json types
+- [internal/prune](internal/prune/README.md): the pruner's planner and gates
+- [internal/archive](internal/archive/README.md): names, scans, root guards
+- [internal/ffmpeg](internal/ffmpeg/README.md): recording arguments and the child process
+- [internal/relay](internal/relay/README.md): MediaMTX configurations and control client
+- [internal/secrets](internal/secrets/README.md): camera login stores
+- [internal/alerts](internal/alerts/README.md): alert channels
+- [internal/autostart](internal/autostart/README.md): install backends
+- [internal/logx](internal/logx/README.md): levelled logging and redaction
+- [internal/clock](internal/clock/README.md): the time seam
+
+## Optional
+
+- [README](README.md): front door - what Holocron offers, quick start, documentation index, stress tests, licence

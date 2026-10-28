@@ -1,0 +1,161 @@
+{
+    "Schema":  1,
+    "State":  "running",
+    "StopKind":  "",
+    "LastUnexpectedStop":  null,
+    "SupervisorPid":  23368,
+    "StartedAt":  "2026-10-28T07:06:57.2714241+02:00",
+    "UpdatedAt":  "2026-10-28T09:07:04.7208178+02:00",
+    "UptimeSeconds":  7207.4,
+    "RootPath":  "C:\\Users\\Nikolas\\AppData\\Local\\Temp\\holocron-w0-bc298710e51e4d51b7eaf6122f691df5\\cameras",
+    "Container":  "mkv",
+    "SegmentSeconds":  900,
+    "Disk":  {
+                 "FreeGB":  179.12,
+                 "ReserveGB":  20,
+                 "PruneHysteresisGB":  5,
+                 "ArchiveGB":  5,
+                 "ArchiveBytes":  5368709120,
+                 "ArchiveFiles":  40,
+                 "OldestSegment":  "2026-10-24T10:07:04.2714241+03:00",
+                 "NewestSegment":  "2026-10-28T09:06:44.2714241+02:00",
+                 "MeasuredGBPerDay":  1.25,
+                 "ProjectedDaysRemaining":  127.3,
+                 "ScannedAt":  "2026-10-28T09:06:31.2714241+02:00"
+             },
+    "Prune":  {
+                  "LastRunAt":  "2026-10-28T09:05:04.2714241+02:00",
+                  "DeletedTotal":  3,
+                  "FreedGBTotal":  1.2,
+                  "Blocked":  false,
+                  "LastMessage":  "pruned 3 files"
+              },
+    "Restreamer":  {
+                       "Enabled":  true,
+                       "RelayBase":  "rtsp://127.0.0.1:8554",
+                       "Pid":  4301,
+                       "LastPid":  4301,
+                       "Alive":  true,
+                       "StartedAt":  "2026-10-28T07:07:04.2714241+02:00",
+                       "RestartsTotal":  1,
+                       "Paths":  [
+                                     "cameraone",
+                                     "cameratwo",
+                                     "camerathree"
+                                 ],
+                       "LastError":  "mediamtx exited with code 1 after 5s",
+                       "LastErrorAt":  "2026-10-28T08:07:04.2714241+02:00"
+                   },
+    "Events":  [
+                   {
+                       "At":  "2026-10-28 09:05:04 +02:00",
+                       "Text":  "pruned 3 files, freed 1.2 GB; used *** for nothing"
+                   },
+                   {
+                       "At":  null,
+                       "Text":  "a line that does not carry the log time shape"
+                   },
+                   {
+                       "At":  "2026-10-28 08:55:04 +02:00",
+                       "Text":  "camera Camera Two: ffmpeg exited with code 1 after 3s (rtsp://***:***@192.0.2.12/stream1)"
+                   },
+                   {
+                       "At":  "2026-10-28 08:28:04 +02:00",
+                       "Text":  "camera Camera One: ffmpeg started on the relay"
+                   },
+                   {
+                       "At":  "2026-10-28 08:27:04 +02:00",
+                       "Text":  "supervisor started, pid 23368"
+                   }
+               ],
+    "Cameras":  [
+                    {
+                        "Name":  "Camera One",
+                        "SafeName":  "Camera_One",
+                        "Record":  true,
+                        "Pid":  4101,
+                        "LastPid":  4101,
+                        "Alive":  true,
+                        "CurrentSegment":  "Camera_One_20261017_121500+0300.mkv",
+                        "CurrentSegmentBytes":  52428800,
+                        "SecondsSinceLastClosedSegment":  312.8,
+                        "InputMode":  "relay",
+                        "RestartsLastHour":  1,
+                        "RestartsTotal":  2,
+                        "StartedAt":  "2026-10-28T08:28:04.2714241+02:00",
+                        "NextStartAt":  null,
+                        "LastError":  "ffmpeg exited with code 1 after 3s",
+                        "LastErrorAt":  "2026-10-28T08:17:04.2714241+02:00",
+                        "ArchiveFiles":  12,
+                        "ArchiveBytes":  1288490188,
+                        "DownSince":  null,
+                        "ConfigError":  ""
+                    },
+                    {
+                        "Name":  "Camera Two",
+                        "SafeName":  "Camera_Two",
+                        "Record":  true,
+                        "Pid":  null,
+                        "LastPid":  4102,
+                        "Alive":  false,
+                        "CurrentSegment":  null,
+                        "CurrentSegmentBytes":  null,
+                        "SecondsSinceLastClosedSegment":  null,
+                        "InputMode":  "direct",
+                        "RestartsLastHour":  2,
+                        "RestartsTotal":  7,
+                        "StartedAt":  "2026-10-28T09:02:04.2714241+02:00",
+                        "NextStartAt":  "2026-10-28T09:07:28.2714241+02:00",
+                        "LastError":  "ffmpeg exited with code 1 after 3s (rtsp://***:***@192.0.2.12/stream1)",
+                        "LastErrorAt":  "2026-10-28T09:02:04.2714241+02:00",
+                        "ArchiveFiles":  null,
+                        "ArchiveBytes":  null,
+                        "DownSince":  "2026-10-28T08:47:04.2714241+02:00",
+                        "ConfigError":  ""
+                    },
+                    {
+                        "Name":  "Camera Three",
+                        "SafeName":  "Camera_Three",
+                        "Record":  false,
+                        "Pid":  null,
+                        "LastPid":  null,
+                        "Alive":  false,
+                        "CurrentSegment":  null,
+                        "CurrentSegmentBytes":  null,
+                        "SecondsSinceLastClosedSegment":  259200.4,
+                        "InputMode":  "",
+                        "RestartsLastHour":  0,
+                        "RestartsTotal":  0,
+                        "StartedAt":  null,
+                        "NextStartAt":  null,
+                        "LastError":  "",
+                        "LastErrorAt":  null,
+                        "ArchiveFiles":  4,
+                        "ArchiveBytes":  402653184,
+                        "DownSince":  null,
+                        "ConfigError":  ""
+                    },
+                    {
+                        "Name":  "CON",
+                        "SafeName":  "",
+                        "Record":  false,
+                        "Pid":  null,
+                        "LastPid":  null,
+                        "Alive":  false,
+                        "CurrentSegment":  null,
+                        "CurrentSegmentBytes":  null,
+                        "SecondsSinceLastClosedSegment":  null,
+                        "InputMode":  "",
+                        "RestartsLastHour":  0,
+                        "RestartsTotal":  0,
+                        "StartedAt":  null,
+                        "NextStartAt":  null,
+                        "LastError":  "",
+                        "LastErrorAt":  null,
+                        "ArchiveFiles":  null,
+                        "ArchiveBytes":  null,
+                        "DownSince":  null,
+                        "ConfigError":  "Camera name \u0027CON\u0027 resolves to the reserved Windows device name \u0027CON\u0027. Rename the camera in cameras.json."
+                    }
+                ]
+}

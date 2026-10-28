@@ -1,0 +1,278 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="dark">
+<title>IPCCTV control</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div class="app">
+
+  <div class="top">
+    <div class="brand">IPCCTV <span>/ control</span></div>
+    <nav class="tabs" id="tabs">
+      <button data-t="dash" aria-current="page">Dashboard</button>
+      <button data-t="set">Settings</button>
+      <button data-t="foot">Footage</button>
+      <button data-t="live">Live</button>
+      <!-- Every signed-in user, on the HTTPS LAN listener only (detectAccess in app.js). -->
+      <button data-t="phone" class="hide" id="phoneTab">Phone</button>
+      <!-- Shown to admins only (detectAccess in app.js); its code, admin.js, is served to admins only. -->
+      <button data-t="admin" class="hide" id="adminTab">Admin</button>
+    </nav>
+    <div class="feed">
+      <span id="feed"></span>
+      <span class="when" id="feedWhen"></span>
+      <!-- Only on the HTTPS LAN listener (setupSignOut in app.js). -->
+      <span class="when hide" id="who"></span>
+      <button class="btn hide" id="signOut" type="button">Sign out</button>
+    </div>
+  </div>
+
+  <!-- Shown only on the HTTPS LAN listener in view-only mode (see detectViewOnly in app.js). -->
+  <div id="viewOnly" class="viewonly-note hide"><strong>This address is view-only.</strong> You can watch the cameras and browse footage, but not start, stop or change anything. Use the PC itself for that.</div>
+  <!-- Shown to a signed-in viewer (detectAccess in app.js); the server refuses a viewer everything else anyway. -->
+  <div id="viewerNote" class="viewonly-note hide"><strong>You are signed in as a viewer.</strong> You can watch the cameras and browse footage. Starting, stopping, recording and settings are for admins.</div>
+
+  <div id="toast"></div>
+  <!-- What is running right now, with the seconds ticking. Filled by
+       renderProgress while an action is in flight. -->
+  <div id="progress"></div>
+
+  <!-- ============== DASHBOARD ============== -->
+  <section data-tab="dash">
+
+    <div id="banner"></div>
+    <div id="stopNotice"></div>
+
+    <div class="actions" id="controls">
+      <button class="btn primary" data-action="start" data-scope="all">Start everything</button>
+      <button class="btn danger" data-action="stop" data-scope="all">Stop everything</button>
+      <button class="btn" data-action="start" data-scope="recorder">Start recorder</button>
+      <button class="btn danger" data-action="stop" data-scope="recorder">Stop recorder</button>
+      <button class="btn" data-action="start" data-scope="dashboard">Start viewers</button>
+      <button class="btn" data-action="stop" data-scope="dashboard">Stop viewers</button>
+    </div>
+
+    <div class="stats" id="stats"></div>
+
+    <div id="camsA">
+      <div class="panel">
+        <header><h2>Cameras</h2><span class="muted" id="recCount"></span></header>
+        <table>
+          <thead><tr><th>Camera</th><th>Status</th><th>Input</th><th>Last segment</th><th>Restarts/h</th><th>Record</th></tr></thead>
+          <tbody id="tbody"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <div id="camsC" class="clist"></div>
+
+    <div class="panel" style="margin-top:16px">
+      <header><h2>Recent events</h2><span class="muted" id="eventCount"></span></header>
+      <ul class="events" id="events"></ul>
+    </div>
+
+    <div class="panel" style="margin-top:16px">
+      <header><h2>Services</h2></header>
+      <ul class="events" id="tasks"></ul>
+    </div>
+
+    <footer class="note">
+      Status is read from <code>status.json</code> and whether the recorder is up is decided by its
+      process, not by what the file last said. Actions go through the supervisor's control API;
+      Start runs <code>holocron up --detach</code>.
+      No camera credential ever reaches this page.
+    </footer>
+  </section>
+
+  <!-- ============== SETTINGS ============== -->
+  <section data-tab="set" class="hide">
+
+    <div class="panel" style="margin-bottom:16px">
+      <header><h2>Cameras</h2><span class="muted" id="camCount"></span></header>
+      <div class="row rowhead">
+        <span>Name</span><span>Address</span><span>Stream</span><span>Record</span><span></span>
+      </div>
+      <div id="setRows"></div>
+      <div class="formfoot">
+        <div class="actions">
+          <button class="btn" id="addCam">Add camera</button>
+          <button class="btn primary" id="saveCams" disabled>Save cameras</button>
+          <button class="btn" id="discardCams" disabled>Discard</button>
+        </div>
+        <div id="camNote" class="formnote"></div>
+      </div>
+    </div>
+
+    <div class="panel">
+      <header><h2>Recording</h2></header>
+      <div class="form">
+        <div class="field" data-field="SegmentSeconds">
+          <label for="SegmentSeconds">Segment length</label>
+          <select id="SegmentSeconds">
+            <option value="300">5 minutes</option>
+            <option value="900">15 minutes</option>
+            <option value="1800">30 minutes</option>
+            <option value="3600">60 minutes</option>
+          </select>
+          <span class="hint">Clock-aligned. Longer segments mean fewer files but a larger loss window if one is corrupted.</span>
+        </div>
+        <div class="field" data-field="ReserveGB">
+          <label for="ReserveGB">Reserve free space</label>
+          <input id="ReserveGB" inputmode="decimal" autocomplete="off">
+          <span class="hint">GB. The pruner deletes the oldest footage to keep free space above this.</span>
+        </div>
+        <div class="field" data-field="PruneHysteresisGB">
+          <label for="PruneHysteresisGB">Prune hysteresis</label>
+          <input id="PruneHysteresisGB" inputmode="decimal" autocomplete="off">
+          <span class="hint">GB above the reserve the pruner frees before it stops, so every new segment does not re-trigger it.</span>
+        </div>
+        <div class="field" data-field="MaxRetentionDays">
+          <label for="MaxRetentionDays">Maximum retention</label>
+          <input id="MaxRetentionDays" inputmode="numeric" autocomplete="off">
+          <span class="hint">Days must be between 1 and 365, or blank for no age limit.</span>
+        </div>
+        <div class="field">
+          <label for="archiveRoot">Archive location</label>
+          <input id="archiveRoot" readonly>
+          <span class="hint">Not editable here: moving the archive needs the recorder stopped.</span>
+        </div>
+        <div class="actions">
+          <button class="btn primary" id="saveConfig" disabled>Save changes</button>
+          <button class="btn" id="discardConfig" disabled>Discard</button>
+          <span id="configNote" class="formnote"></span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Shown only when this page is served by the HTTPS LAN listener (api/tls/info exists there and nowhere else). -->
+    <div class="panel hide" id="tlsPanel" style="margin-top:16px">
+      <header><h2>Connect a phone or another PC</h2></header>
+      <div class="form">
+        <p class="hint">Install this PC's own certificate authority once on each device so it trusts this address, then sign in again with your username and password. You must already be signed in to download it: open the page, accept the certificate warning once, sign in, download, install, then reopen the page.
+          Before you trust it, check that the device shows this fingerprint:</p>
+        <p><code id="tlsFingerprint" style="word-break:break-all"></code></p>
+        <div class="actions"><a class="btn primary" href="api/tls/ca.crt" download="ipcctv-local-ca.crt">Download the certificate</a></div>
+        <p class="hint">iPhone: open the file, install it under Settings &gt; General &gt; VPN &amp; Device Management, then turn it on under Settings &gt; General &gt; About &gt; Certificate Trust Settings.
+          Android: Settings &gt; Security &gt; Install a certificate &gt; CA certificate. Steps and removal are in docs/ui.md.</p>
+      </div>
+    </div>
+
+    <footer class="note">
+      Writes go through the same atomic save the CLI uses, preserving every field and the file's
+      byte-order mark. A camera change is picked up by the running recorder within seconds;
+      the settings above it reads when it starts.
+    </footer>
+  </section>
+
+  <!-- ============== PHONE (every signed-in user; the Settings copy above is the admins') ============== -->
+  <section data-tab="phone" class="hide">
+    <div class="panel" id="phonePanel">
+      <header><h2>Connect a phone or another PC</h2></header>
+      <div class="form">
+        <p class="hint">Install this PC's own certificate authority once on each device so it trusts this address, then sign in again with your username and password. You must already be signed in to download it: open the page, accept the certificate warning once, sign in, download, install, then reopen the page.
+          Before you trust it, check that the device shows this fingerprint:</p>
+        <p><code id="phoneFingerprint" style="word-break:break-all"></code></p>
+        <div class="actions"><a class="btn primary" href="api/tls/ca.crt" download="ipcctv-local-ca.crt">Download the certificate</a></div>
+        <p class="hint">iPhone: open the file, install it under Settings &gt; General &gt; VPN &amp; Device Management, then turn it on under Settings &gt; General &gt; About &gt; Certificate Trust Settings.
+          Android: Settings &gt; Security &gt; Install a certificate &gt; CA certificate. Steps and removal are in docs/ui.md.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============== FOOTAGE ============== -->
+  <section data-tab="foot" class="hide">
+    <div class="foot">
+
+      <div class="pick" id="fCam">
+        <div class="phead">Camera</div>
+      </div>
+
+      <div class="pick" id="fDay">
+        <div class="phead">Date</div>
+      </div>
+
+      <div>
+        <div class="player" id="fPlayer"></div>
+        <div class="panel" style="margin-top:12px">
+          <header>
+            <h2>Segments</h2>
+            <span class="muted" id="fCount"></span>
+            <button class="btn small" id="fRefresh">Refresh</button>
+          </header>
+          <div id="fGaps"></div>
+          <ul class="events seglist" id="fSegs"></ul>
+        </div>
+      </div>
+
+    </div>
+
+    <footer class="note">
+      The index is parsed from filenames &mdash; <code>Front_Entrance_20261013_190147+0300.mkv</code>
+      already carries the camera, the date, the time and the UTC offset, so there is no database and
+      nothing opens a segment to list it. A segment plays as MP4 remuxed on request: the video is
+      copied and only the 8&nbsp;kHz camera audio is re-encoded. The segment being recorded right now
+      plays up to the point it has reached.
+    </footer>
+  </section>
+
+  <!-- ============== ADMIN ============== -->
+  <!-- Empty for everyone: admin.js fills it, and only admins receive admin.js. -->
+  <section data-tab="admin" class="hide"></section>
+
+  <!-- ============== LIVE ============== -->
+  <section data-tab="live" class="hide">
+    <div class="lwrap" id="lwrap">
+      <div class="ltools">
+        <span class="muted" id="lcount"></span>
+        <span class="muted lhint">Click a camera to enlarge it. Sound is off until you unmute. Pictures stop while this tab is hidden.</span>
+        <span class="lmode" role="group" aria-label="Picture size" title="Fit shows the whole picture; Fill uses the whole area and crops the edges">
+          <button type="button" class="btn small" id="lfit" aria-pressed="true">Fit</button><button type="button" class="btn small" id="lfill" aria-pressed="false">Fill</button>
+        </span>
+        <button type="button" class="btn small" id="lfs" aria-pressed="false">Fullscreen</button>
+      </div>
+      <div id="lnote" class="lnote hide"></div>
+      <div class="lgrid" id="lgrid"></div>
+
+      <!-- One camera, large. Inside lwrap so it is still shown while the grid is fullscreen. -->
+      <dialog id="lmodal" class="lmodal" role="dialog" aria-modal="true" aria-labelledby="lmname">
+        <div class="lmbox" id="lmbox" data-show="sub">
+          <div class="lmstage">
+            <video id="lmsub" class="lmv" muted autoplay playsinline></video>
+            <video id="lmmain" class="lmv" muted autoplay playsinline></video>
+            <div id="lmmsg" class="lmmsg"></div>
+          </div>
+          <div class="lmtop">
+            <span class="lmname" id="lmname"></span>
+            <span class="lmchips" id="lmchips"></span>
+            <button type="button" class="lmb hide" id="lmretry">Retry HD</button>
+            <button type="button" class="lmb" id="lmcopy">Copy diagnostics</button>
+            <button type="button" class="lmb" id="lmmute" aria-pressed="false">Unmute</button>
+            <button type="button" class="lmb" id="lmfs">Fullscreen</button>
+            <button type="button" class="lmb" id="lmclose" autofocus>Close</button>
+          </div>
+        </div>
+      </dialog>
+    </div>
+  </section>
+</div>
+
+<!-- Confirmation for anything that stops footage being recorded, and for every destructive Admin action. -->
+<dialog id="confirm">
+  <form method="dialog">
+    <h2 id="confirmTitle"></h2>
+    <p id="confirmBody"></p>
+    <div class="actions">
+      <button class="btn" value="cancel">Cancel</button>
+      <button class="btn danger" id="confirmGo" value="go"></button>
+    </div>
+  </form>
+</dialog>
+
+<script src="live.js"></script>
+<script src="app.js"></script>
+</body>
+</html>

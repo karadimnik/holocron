@@ -1,0 +1,179 @@
+function Get-CamConfigDefault {
+    <#
+        Every configuration key with its in-code default, so a missing or
+        partial recorder.config.json still produces a working recorder.
+    #>
+    return @{
+        RootPath             = 'E:\cameras'
+        FfmpegPath           = 'C:\ffmpeg\bin\ffmpeg.exe'
+        FfprobePath          = 'C:\ffmpeg\bin\ffprobe.exe'
+        SegmentSeconds       = 900
+        ReserveGB            = 20
+        PruneHysteresisGB    = 5
+        PruneIntervalSeconds = 300
+        MaxRetentionDays     = $null
+        # The age rule's circuit breaker: a run whose MaxRetentionDays would
+        # delete more than this share of the archive - by segment count or by
+        # bytes - deletes nothing by age. 1.0 switches the brake off. The
+        # free-space watermark is never held back by it.
+        MaxAgePruneFraction  = 0.5
+
+        # Dashboard layout. The strip the dashboard reserves along the bottom
+        # of the screen for cam.health.ps1:
+        #   -1  derive it from the video aspect - each pane is exactly as tall
+        #       as the video is at the pane width, and the strip takes every
+        #       pixel left over. This is what puts 640x360 video on a 1920 px
+        #       screen with six cameras.
+        #    0  no strip at all. The panes fill the screen exactly as they did
+        #       before the strip existed and no health window is launched.
+        #   >0  that many pixels, with the panes shrunk to fit.
+        HealthStripHeightPx  = -1
+        # Never give the strip less than this many pixels; shrink the panes
+        # instead. A strip too short to read is worse than slightly smaller
+        # video.
+        HealthStripMinPx     = 120
+        # Gutter BETWEEN the grid rows, and between the grid and the strip.
+        # Never at the screen edges: three 640 px panes fill a 1920 px screen
+        # exactly, so an edge gutter could only come out of the picture.
+        GridGutterPx         = 8
+        # Shape of the video, which fixes the pane height at a given pane
+        # width. These cameras are 16:9.
+        VideoAspectWidth     = 16
+        VideoAspectHeight    = 9
+        # Approximate cell size of the strip window's font. Used ONLY to ask
+        # Windows Terminal for a roughly right size at launch so it cannot
+        # flash up over the grid; the exact pixel geometry is applied with
+        # SetWindowPos afterwards and the renderer reads its real row and
+        # column count from the console it ends up with. Neither number can
+        # affect correctness.
+        HealthCellWidthPx    = 9
+        HealthCellHeightPx   = 20
+
+        # Sections the health strip renders, in this order. Remove a name to
+        # switch that section off; an empty list renders an empty strip.
+        #   status   one line - supervisor, relay, free space, days left
+        #   cameras  the per-camera table with its column header
+        #   events   the most recent supervisor events, newest first
+        #   archive  footage span and size, then the disk trend and pruning
+        HealthSections       = @('status', 'cameras', 'events', 'archive')
+        # Rows the events section occupies, its own label row included. Five
+        # fills the Operator's 15-row strip exactly alongside six cameras:
+        # 1 status + 1 header + 6 cameras + 5 events + 2 archive. The camera
+        # table absorbs any difference at another camera count.
+        HealthEventRows      = 5
+        # How many of the supervisor log's most recent lines status.json
+        # publishes for the strip to read.
+        StatusEventCount     = 20
+        # Local restreamer (MediaMTX). Transport fan-out only: it frees the
+        # second camera slot, keeps the camera password out of every consumer's
+        # command line, and halves the load on camera and network. The paths
+        # it serves are generated from cameras.json by -InstallRestreamer.
+        RestreamerEnabled    = $true
+        RestreamerExePath    = 'C:\mediamtx\mediamtx.exe'
+        RestreamerConfigPath = 'C:\mediamtx\mediamtx.yml'
+        RelayBase            = 'rtsp://127.0.0.1:8554'
+        RelayApiBase         = 'http://127.0.0.1:9997'
+        # Budget for one control-API probe. Spent once per recorder child
+        # start and once per mpv pane attempt, both on loopback.
+        RelayProbeTimeoutMs  = 1500
+        # How long the supervisor waits for the restreamer to answer its
+        # control API before it starts the recorders. Without the wait the
+        # recorders take a direct slot each at a cold start, and a camera
+        # already serving the dashboard would then have no slot left for the
+        # restreamer to pull. It waits for the API only, not for every path:
+        # each camera waits for its OWN path below, so one offline camera -
+        # whose path can never become ready - cannot delay the others.
+        RelayStartupWaitSeconds = 20
+        # How long ONE consumer waits for its OWN relay path to start serving
+        # before it gives up and takes a direct camera slot. Spent only on a
+        # consumer's first attempt, at batch startup: a later attempt decides
+        # on the spot so a relay that died is left behind immediately.
+        RelayReadyWaitSeconds   = 15
+        # How often that wait re-asks.
+        RelayReadyPollMs        = 500
+        # How often an mpv pane that is on a DIRECT connection asks whether
+        # the relay has started serving its camera again, so it can hand the
+        # second camera session back. One control-API call per pane per
+        # interval, and only for a pane that is actually on direct. 0 switches
+        # the watch off and leaves such a pane on direct until the dashboard
+        # is relaunched, which is what it did before this existed.
+        ViewerPromoteCheckSeconds = 10
+        # Delay between consecutive consumer starts - recorder children and
+        # mpv panes alike - so six of them do not burst onto the relay, the
+        # control API and the cameras in the same instant.
+        StartStaggerMs          = 300
+        # Live view in a browser: a SECOND MediaMTX, dedicated to WebRTC and
+        # separate from the recording relay above, which never speaks WebRTC.
+        # Off by default; with it off nothing here is read, started or written.
+        # Its paths are <relaypath>sub (the camera's LiveSubStream, pulled on
+        # demand) and <relaypath>main (the recording relay's own path, so no
+        # extra camera session). Read access needs a login that only the
+        # supervisor and camui can read; see tasks/holocron/live-1a-design.md.
+        LiveViewEnabled      = $false
+        # Empty means the relay's RestreamerExePath.
+        LiveExePath          = ''
+        # A LOCAL NTFS path, like RestreamerConfigPath.
+        LiveConfigPath       = 'C:\mediamtx\mediamtx-live.yml'
+        # WebRTC signaling (TCP) is loopback only: browsers reach it through camui's proxy. The ICE media port (UDP) is
+        # loopback by default; to serve another device on the LAN set a private IPv4 or 0.0.0.0 here AND list the
+        # address(es) browsers must use in LiveAdvertiseHosts (see docs/configuration.md, "Live view").
+        LiveWhepAddress      = '127.0.0.1:8889'
+        LiveUdpAddress       = '127.0.0.1:8189'
+        LiveAdvertiseHosts   = @()
+        # The camera stream the live grid pulls, on demand.
+        LiveSubStream        = 'stream2'
+        # How long after the last viewer leaves the camera session is closed.
+        LiveCloseAfterSeconds = 10
+        # The login's secret. Empty means %LOCALAPPDATA%\IPCCTV\live_view_secret.txt:
+        # a local per-user folder, because the repository share cannot hold an ACL.
+        LiveSecretPath       = ''
+        Container            = 'mkv'
+        ContainerProfiles    = @{
+            mkv  = [pscustomobject]@{
+                Extension            = '.mkv'
+                SegmentFormat        = 'matroska'
+                # Empty: the global -c copy already copies audio. Adding an
+                # explicit -c:a copy makes ffmpeg warn about duplicate codec
+                # options on every start. Only a profile that changes the audio
+                # codec needs AudioArgs, as fmp4 does.
+                AudioArgs            = @()
+                ExtraArgs            = @()
+                SegmentFormatOptions = ''
+            }
+            fmp4 = [pscustomobject]@{
+                Extension            = '.mp4'
+                SegmentFormat        = 'mp4'
+                AudioArgs            = @('-c:a', 'aac', '-b:a', '64k')
+                ExtraArgs            = @()
+                SegmentFormatOptions = 'movflags=+frag_keyframe+empty_moov+default_base_moof'
+            }
+        }
+
+        # Input and supervisor tuning. Defaults are the values the plan fixed;
+        # they are configuration keys so a camera-specific problem can be tuned
+        # without a code change.
+        RtspTransport        = 'tcp'
+        TimeoutMicroseconds  = 10000000
+        ReconcileSeconds     = 5
+        StatusIntervalSeconds = 5
+        # The archive-wide scan behind the status file's disk figures. Separate
+        # from the status cadence because it touches every segment file, which
+        # is too much work to repeat every 5 s.
+        ArchiveScanSeconds   = 60
+        # How long a camera may write nothing before the Operator is alerted,
+        # and how long before the same camera alerts again while still down.
+        # Measured from the later of the supervisor's own start and the
+        # camera's newest segment - NEVER from the child's StartedAt, which a
+        # camera that is failing to connect refreshes on every retry.
+        CameraDownAlertMinutes = 15
+        CameraDownRepeatHours  = 12
+        # How long -Stop waits for the supervisor to tear its children down.
+        StopTimeoutSeconds   = 30
+        BackoffStartSeconds  = 3
+        BackoffMaxSeconds    = 60
+        HealthyResetSeconds  = 300
+        StallFactor          = 2.5
+        LogMaxBytes          = 2MB
+        LogRepeatSuppressSeconds = 60
+    }
+}
