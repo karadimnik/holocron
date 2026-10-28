@@ -4,14 +4,14 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="color-scheme" content="dark">
-<title>IPCCTV control</title>
+<title>Holocron</title>
 <link rel="stylesheet" href="style.css">
 </head>
 <body>
 <div class="app">
 
   <header class="top">
-    <div class="brand">IPCCTV <span>/ control</span></div>
+    <div class="brand">Holocron</div>
     <nav class="tabs" id="tabs">
       <button data-t="dash" aria-current="page">Dashboard</button>
       <button data-t="set">Settings</button>
@@ -45,7 +45,7 @@
     <h2>Start it again on the PC</h2>
     <ul>
       <li>run <code>holocron up --detach</code> in a terminal, or</li>
-      <li>sign in to Windows again, when autostart is on (the logon task starts it), or</li>
+      <li>sign in again, when autostart is on (the logon task, systemd unit or launchd agent starts it), or</li>
       <li>start it from your service manager, when it runs as a service.</li>
     </ul>
     <div class="actions"><button class="btn primary" id="stoppedCheck" type="button">Check again</button><span class="muted" id="stoppedNote" role="status" aria-live="polite"></span></div>

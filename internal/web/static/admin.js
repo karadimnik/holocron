@@ -156,7 +156,7 @@
           <li>live view and the camera relay</li>
           <li>when it was started with <code>holocron up</code> (the usual way): the Holocron host and this web page, which stops answering</li>
         </ul>
-        <p><b>No footage is recorded until Holocron is started again.</b> To start it again: run <code>holocron up --detach</code> on the PC, sign in to Windows again (the logon task starts it when autostart is on), or start it from your service manager.</p>
+        <p><b>No footage is recorded until Holocron is started again.</b> To start it again: run <code>holocron up --detach</code> on the PC, sign in again (the logon task, systemd unit or launchd agent starts it when autostart is on), or start it from your service manager.</p>
       </div>
       <div class="field"><label for="aStopWord">Type STOP to confirm</label><input id="aStopWord" autocomplete="off" spellcheck="false" autocapitalize="characters"></div>
       <div class="actions">

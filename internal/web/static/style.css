@@ -1,4 +1,4 @@
-/* IPCCTV control UI.
+/* Holocron web app UI.
    Tokens, components and structure are the approved design mockup's:
    layout A (table) on desktop, layout C (compact rows) below the phone breakpoint.
    Status is never colour alone - every state carries a dot AND a word. */
@@ -481,3 +481,6 @@ body.is-stopped main,body.is-stopped nav.tabs{display:none}
 .stopped p{margin:0 0 8px;color:var(--ink-2)}
 .stopped ul{padding-left:20px;color:var(--ink-2)}
 .stopped .actions{margin:14px 0 8px}
+
+/* the closing paragraph of a dialog sits clear of the list above it */
+dialog ul + p { margin-top: 12px; }
