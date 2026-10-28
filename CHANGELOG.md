@@ -20,7 +20,7 @@ A version is `MAJOR.MINOR.PATCH`, tagged `vMAJOR.MINOR.PATCH`. The public interf
 
 ## [Unreleased]
 
-## [1.1.0] - 2026-10-28
+## [1.1.0] - 2026-10-29
 
 ### Changed
 
