@@ -372,3 +372,41 @@ func TestRecordSwitchOffOffersUndo(t *testing.T) {
 		t.Error("the toast region is not a polite live region")
 	}
 }
+
+// Stop lives in Admin > System only (D24): its dialog and the reload call are in admin.js, which only
+// an admin receives; the dialog needs STOP typed, starts on Cancel, and the page every user gets has
+// the "Holocron has stopped" panel that replaces "Server unreachable" after a stop it asked for.
+func TestStopIsAdminOnlyAndTypedConfirmed(t *testing.T) {
+	admin, err := staticFiles.ReadFile("static/admin.js")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, want := range []string{`post("api/admin/reload", {}, "aReloadNote")`, `<dialog id="aStopDialog"`, `class="dzone"`,
+		`const stopTyped = () => el("aStopWord").value.trim().toLowerCase() === "stop";`,
+		`<button class="btn" value="cancel" id="aStopCancel" autofocus>Cancel</button>`,
+		`<button class="btn danger" value="stop" id="aStopGo" disabled>Stop Holocron</button>`,
+		`el("aStopDialog").returnValue === "stop" && stopTyped()`, "holocron up --detach"} {
+		if !strings.Contains(string(admin), want) {
+			t.Errorf("admin.js has no %s", want)
+		}
+	}
+	page, err := staticFiles.ReadFile("static/index.html")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, gone := range []string{"aStopDialog", "api/admin/reload", `"stop"`} {
+		if strings.Contains(string(page), gone) {
+			t.Errorf("index.html, served to viewers too, has %s", gone)
+		}
+	}
+	if !strings.Contains(string(page), `<section id="stoppedPanel" class="stopped" hidden`) {
+		t.Error("index.html has no hidden stopped panel")
+	}
+	app, err := staticFiles.ReadFile("static/app.js")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(app), "if (fetchError && stopped) {") || !strings.Contains(string(app), "if (!fetchError && live) stopped = null;") {
+		t.Error("app.js does not show the stopped panel only after its own stop")
+	}
+}

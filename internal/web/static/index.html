@@ -36,6 +36,22 @@
   <!-- Shown to a signed-in viewer (detectAccess in app.js); the server refuses a viewer everything else anyway. -->
   <div id="viewerNote" class="viewonly-note hide"><strong>You are signed in as a viewer.</strong> You can watch the cameras and browse footage. Starting, stopping, recording and settings are for admins.</div>
 
+  <!-- Shown instead of everything below once a stop this page asked for has taken the server away
+       (renderStopped in app.js): under holocron up the web app stops with the rest. -->
+  <section id="stoppedPanel" class="stopped" hidden aria-labelledby="stoppedTitle">
+    <h1 id="stoppedTitle" tabindex="-1">Holocron has stopped</h1>
+    <p id="stoppedWhen"></p>
+    <p>Nothing is being recorded, and this page cannot reach the web app because it stopped with the rest. That is expected after a stop.</p>
+    <h2>Start it again on the PC</h2>
+    <ul>
+      <li>run <code>holocron up --detach</code> in a terminal, or</li>
+      <li>sign in to Windows again, when autostart is on (the logon task starts it), or</li>
+      <li>start it from your service manager, when it runs as a service.</li>
+    </ul>
+    <div class="actions"><button class="btn primary" id="stoppedCheck" type="button">Check again</button><span class="muted" id="stoppedNote" role="status" aria-live="polite"></span></div>
+    <p class="muted">This page reloads by itself when Holocron answers again.</p>
+  </section>
+
   <main id="main">
   <!-- What the last action did (toast in app.js); polite, so a result is read without moving the focus. -->
   <div id="toast" role="status" aria-live="polite"></div>

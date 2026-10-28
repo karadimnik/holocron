@@ -98,6 +98,12 @@ const anyBusy = () => busyControl !== null || busyCameras.size > 0;
 
 const SCOPE_LABEL = { all: "Holocron" };
 
+// stopped is set when this page asked for a stop ({at, confirmed}: confirmed when
+// the server answered it). When the server then stops answering, the page shows
+// "Holocron has stopped" instead of "Server unreachable" (renderStopped). A poll
+// that finds the supervisor running clears it.
+let stopped = null;
+
 // systemState is what the last poll said: "running" or "stopped" from
 // supervisor.running, or null before the first answer and while the server does
 // not answer. The standalone notice and its Start are shown for "stopped" only.
@@ -239,6 +245,12 @@ function render(payload, fetchError) {
 
   // The one liveness test. Not status.State.
   const live = !!supervisor.running;
+  if (fetchError && stopped) {
+    systemState = null;
+    renderStopped();
+    return;
+  }
+  if (!fetchError && live) stopped = null;
   systemState = fetchError || !payload ? null : live ? "running" : "stopped";
   const stale = !!status && supervisor.state === "running" && !live;
 
@@ -589,9 +601,11 @@ async function runControl(scope, action) {
   renderProgress();
   startBusyTicker();
 
+  if (action === "stop") stopped = { at: new Date(), confirmed: false };
   try {
     const { ok, payload } = await sendJSON("POST", "api/control", { scope, action });
     const verb = action === "start" ? "Start" : "Stop";
+    if (action === "stop") stopped = ok && payload.ok ? { at: stopped.at, confirmed: true } : null;
     if (!ok || !payload.ok) {
       toast("crit", verb + " " + SCOPE_LABEL[scope] + " failed: " + (payload.error || "unknown error"), payload.output);
       return;
@@ -705,6 +719,37 @@ function undoToast(name) {
 function focusCameraSwitch(name) {
   const target = [...document.querySelectorAll(".tgl[data-camera]")].find((n) => n.dataset.camera === name && n.offsetParent !== null);
   if (target && !target.disabled) target.focus();
+}
+
+// stopHolocron is the Admin > System Stop, after its typed confirmation.
+function stopHolocron() {
+  return runControl("all", "stop");
+}
+
+// renderStopped replaces the page with "Holocron has stopped" once a stop this
+// page asked for has taken the server away, and moves the focus to its heading.
+function renderStopped() {
+  el("feed").innerHTML = chip("off", "Stopped");
+  el("feedWhen").textContent = "";
+  if (!el("stoppedPanel").hidden) return;
+  el("stoppedWhen").textContent = (stopped.confirmed ? "Holocron confirmed the stop" : "The stop was sent; the page lost the server before the answer arrived") +
+    " at " + stopped.at.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) + ".";
+  document.body.classList.add("is-stopped");
+  el("stoppedPanel").hidden = false;
+  el("stoppedTitle").focus();
+}
+
+// checkAgain asks once; the page reloads as soon as the server answers.
+async function checkAgain() {
+  el("stoppedNote").textContent = "Checking…";
+  try {
+    const response = await fetch("api/status", { cache: "no-store" });
+    if (response.ok) {
+      location.reload();
+      return;
+    }
+  } catch (err) { /* still gone */ }
+  el("stoppedNote").textContent = "Still not answering (checked at " + new Date().toLocaleTimeString() + "). The page also checks every " + POLL_MS / 1000 + " s.";
 }
 
 // ---------------------------------------------------------------------------
@@ -1232,6 +1277,7 @@ function renderFootagePlayer() {
 // ---------------------------------------------------------------------------
 
 el("startHolocron").onclick = () => runControl("all", "start");
+el("stoppedCheck").onclick = checkAgain;
 
 // Both camera layouts and both screens are rendered from innerHTML, so the
 // handlers are delegated rather than attached per element.
@@ -1421,6 +1467,10 @@ async function poll() {
     const response = await fetch("api/status", { cache: "no-store" });
     if (!response.ok) throw new Error("HTTP " + response.status);
     last = await response.json();
+    if (!el("stoppedPanel").hidden) {
+      location.reload();
+      return;
+    }
     render(last, null);
   } catch (err) {
     render(last, err.message || String(err));
