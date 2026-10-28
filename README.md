@@ -13,8 +13,7 @@ Holocron turns your PC into a 24/7 home security recorder. One small program rec
 
 * **Recording with audio** - `ffmpeg` stream-copies each camera's video and audio into fixed-length segments (15 minutes by default), with no re-encoding.
 * **Self-healing** - a supervisor restarts a recorder that exits or stalls, with backoff; a relay (MediaMTX) holds one session per camera, shared by the recorder and the live view.
-* **A web app** - Dashboard, Live (WebRTC: sub-streams in the grid, the main stream on focus), Footage by camera and day, Settings, and an Admin tab with the health panel and users. Two roles: admin and viewer.
-* **Phones and the LAN over HTTPS** - an optional HTTPS listener with its own local certificate authority (`holocron tls ca` shows how to install it on a device).
+* **A web app** - Dashboard, Live (WebRTC: sub-streams in the grid, the main stream on focus), Footage by camera and day, Settings, and an Admin tab with the health panel and users. Two roles: admin and viewer. Phones and other PCs connect over an optional HTTPS listener with its own local certificate authority (`holocron tls ca`).
 * **Retention by free space** - the pruner deletes the oldest footage to keep a free-space watermark (`ReserveGB`).
 * **A tidy archive** - closed segments are filed into one folder per camera and day, `<Camera>/YYYY-MM-DD/`.
 * **Alerts** - desktop, the system log (Windows event log, syslog), the log file, a push channel (ntfy-style) and a webhook; `holocron alert test` proves each one.
@@ -29,7 +28,7 @@ Holocron turns your PC into a 24/7 home security recorder. One small program rec
 | Linux | amd64, arm64 | Built and tested in CI on `ubuntu-latest`, including the real-ffmpeg and real-process suites. Not yet run in production. | systemd user unit, exercised in WSL2 only |
 | macOS | arm64 (Apple silicon) | Built and tested in CI on `macos-latest`, report-only (that job cannot fail a run). Not used outside CI. | launchd agent, untested on a Mac |
 
-The arm64 Linux build is cross-compiled; its tests run on amd64. Details: [known limitations](docs/limitations.md), [continuous integration](docs/ci.md), [autostart](docs/autostart.md).
+The arm64 Linux build is cross-compiled; its tests run on amd64. Every known limit, with its source: [docs/limitations.md](docs/limitations.md); CI: [docs/ci.md](docs/ci.md); autostart per OS: [docs/autostart.md](docs/autostart.md).
 
 ## Requirements
 
@@ -40,8 +39,6 @@ The arm64 Linux build is cross-compiled; its tests run on amd64. Details: [known
 | IP cameras | RTSP | one entry per camera in `cameras.json` |
 | A browser | WebRTC | for the live view; Firefox needs a LAN media address ([limitations](docs/limitations.md)) |
 | Go | the version in [go.mod](go.mod) (1.27) | only to build from source |
-
-`holocron doctor` checks ffmpeg and MediaMTX (`setup.ffmpeg`, `setup.mediamtx`).
 
 ## Install
 
@@ -92,7 +89,7 @@ GOOS=linux GOARCH=arm64 go build ./cmd/holocron     # cross-compile any released
 ./build-holocron.sh                                 # developer build: gofmt, vet and tests, then holocron.exe (windows/amd64)
 ```
 
-The published binaries come only from the release workflow (`.github/workflows/release.yml`, GoReleaser, `CGO_ENABLED=0`); CI builds the same four targets and a snapshot of the release on every push to `main`. More: [building and testing](docs/development.md).
+More: [building and testing](docs/development.md).
 
 ## Quick start
 
@@ -143,7 +140,6 @@ holocron install                                   # logon task Holocron
 | `holocron archive stats` | per camera: segments, size, oldest and newest; GB per day, free space, projected days |
 | `holocron alert test` | send a test alert through every channel |
 | `holocron down` / `holocron up --detach` | stop everything and prove it; start again in the background |
-| `holocron version` | the build and spec versions |
 
 Every command, file, port, exit code and alert: [the cheat sheet](docs/holocron-cheatsheet.md).
 
@@ -151,34 +147,25 @@ Every command, file, port, exit code and alert: [the cheat sheet](docs/holocron-
 
 * **Guides** - [quickstart](docs/holocron-quickstart.md) and [cheat sheet](docs/holocron-cheatsheet.md).
 * **Operating** - [the web app](docs/ui.md), [autostart](docs/autostart.md), [alerts](docs/alerts.md), [configuration](docs/configuration.md) (every key: [KEYS.md](internal/config/KEYS.md)), [troubleshooting](docs/troubleshooting.md), [rollback](docs/rollback.md), [known limitations](docs/limitations.md), [comparing two archives](docs/shadow.md).
-* **How it works** - [docs/how-it-works.md](docs/how-it-works.md).
-* **Development** - [building, testing and the documentation checks](docs/development.md), [continuous integration](docs/ci.md), [releasing](docs/releasing.md).
+* **Development** - [how it works](docs/how-it-works.md), [building, testing and the documentation checks](docs/development.md), [continuous integration](docs/ci.md), [releasing](docs/releasing.md).
 * **For AI agents** - [docs/ai/holocron-for-agents.md](docs/ai/holocron-for-agents.md), [AGENTS.md](AGENTS.md) and [llms.txt](llms.txt).
 * **Design, decisions and records** - `tasks/holocron/`, including the cutover from the PowerShell system ([runbook](tasks/holocron/cutover-runbook.md), [plan and record](tasks/holocron/cutover-plan.md)) and the shadow run before it ([runbook](tasks/holocron/shadow-runbook.md)).
 
 ## Releases and versioning
 
-Holocron follows [Semantic Versioning](https://semver.org/) and lists the changes of each version in [CHANGELOG.md](CHANGELOG.md); every merge to `main` that changes shipped behaviour is released. Pushing a tag `vX.Y.Z` on `main` runs the release workflow, which builds the four archives, their SBOMs, `checksums.txt` and the attestations, and publishes the release with the version's changelog section as its notes. The process and how to verify a download: [docs/releasing.md](docs/releasing.md).
+Holocron follows [Semantic Versioning](https://semver.org/) and lists the changes of each version in [CHANGELOG.md](CHANGELOG.md); every merge to `main` that changes shipped behaviour is released. Published binaries come only from the release workflow (`.github/workflows/release.yml`): pushing a tag `vX.Y.Z` on `main` runs it, and it builds the four archives, their SBOMs, `checksums.txt` and the attestations, and publishes the release with the version's changelog section as its notes. The process and how to verify a download: [docs/releasing.md](docs/releasing.md).
 
 ## Security
 
 On the command line, passwords and secrets are read from standard input only, never from an argument, and the camera login is stored in the Windows Credential Manager or an encrypted file with an owner-only key ([configuration](docs/configuration.md)). The web app listens on loopback (`127.0.0.1:8787`) by default; other devices reach it only through the optional HTTPS listener, which requires a sign-in, or a non-loopback address that the web app refuses without an access token ([the web app](docs/ui.md)).
 
-## Project status
-
-Holocron 1.x records one home around the clock on Windows; the platform table above says what is proven elsewhere. Known limits, each with its source: [docs/limitations.md](docs/limitations.md).
-
 ## Stress tests
 
 The live view's design was load-tested on 2026-10-15 (six WebRTC tiles from a loopback MediaMTX, Chrome and Edge 155, i5-6600K with a GTX 1070 Ti): six 2560x1440 streams were smooth with hardware decode (Chrome 64.7% of one core) and unusable without it (150.1%, 14.71% frames dropped); six 640x360 sub-streams were smooth either way (52.9% to 59.3%), and so were five sub-streams plus one 1440p stream on focus, which is why the grid shows sub-streams. Only comparisons between cells are safe; LAN, phone and Firefox viewers were not measured. Setup, every result and the raw data: [tests/stress/live-view/README.md](tests/stress/live-view/README.md).
 
-## Spikes
-
-The feasibility spikes SP1 to SP7 that preceded the build are kept on the branch `spikes`: [reports](https://github.com/karadimnik/holocron/tree/spikes/tasks/holocron/spikes) and [programs](https://github.com/karadimnik/holocron/tree/spikes/spikes).
-
 ## Where it came from
 
-Holocron replaced a PowerShell camera wall and recorder on 22 Oct 2026; that system lives complete in the repository `windows-terminal-IPCCTV-dashboard` (branch `master`), where Holocron was built on the branch `portable-nvr` until this repository started at the tag `v1.0.0`. The PowerShell system is the target of the last step of [the rollback](docs/rollback.md).
+Holocron replaced a PowerShell camera wall and recorder on 22 Oct 2026; that system lives complete in the repository `windows-terminal-IPCCTV-dashboard` (branch `master`), where Holocron was built on the branch `portable-nvr` until this repository started at the tag `v1.0.0`. The PowerShell system is the target of the last step of [the rollback](docs/rollback.md). The feasibility spikes SP1 to SP7 that preceded the build are on the branch `spikes`: [reports](https://github.com/karadimnik/holocron/tree/spikes/tasks/holocron/spikes) and [programs](https://github.com/karadimnik/holocron/tree/spikes/spikes).
 
 ## License
 
