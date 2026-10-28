@@ -20,6 +20,8 @@ A version is `MAJOR.MINOR.PATCH`, tagged `vMAJOR.MINOR.PATCH`. The public interf
 
 ## [Unreleased]
 
+## [1.0.2] - 2026-10-28
+
 ### Changed
 
 - Web app: the Dashboard shows only the control that fits the state, Stop everything while Holocron runs and Start everything while it does not; the viewers buttons and the duplicate recorder buttons were removed, and the progress text says an action usually takes a few seconds.
@@ -56,6 +58,7 @@ The first version of Holocron in its own repository: a Go network video recorder
 - Builds for Windows (first-class and live), Linux and macOS, cross-compiled and tested in CI.
 - Licence: [PolyForm Noncommercial License 1.0.0](LICENSE) (decision D22).
 
-[Unreleased]: https://github.com/karadimnik/holocron/compare/v1.0.1...HEAD
+[Unreleased]: https://github.com/karadimnik/holocron/compare/v1.0.2...HEAD
+[1.0.2]: https://github.com/karadimnik/holocron/compare/v1.0.1...v1.0.2
 [1.0.1]: https://github.com/karadimnik/holocron/compare/v1.0.0...v1.0.1
 [1.0.0]: https://github.com/karadimnik/holocron/releases/tag/v1.0.0

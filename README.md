@@ -44,7 +44,7 @@ The arm64 Linux build is cross-compiled; its tests run on amd64. Every known lim
 
 ### Download a release
 
-Get the archive for your platform from the [latest release](https://github.com/karadimnik/holocron/releases/latest). `<version>` is the tag without its `v` (tag `v1.0.1`, file `holocron_1.0.1_linux_amd64.tar.gz`).
+Get the archive for your platform from the [latest release](https://github.com/karadimnik/holocron/releases/latest). `<version>` is the tag without its `v` (tag `v1.0.2`, file `holocron_1.0.2_linux_amd64.tar.gz`).
 
 | Platform | Archive |
 | --- | --- |
@@ -57,7 +57,7 @@ Each archive holds the executable, `LICENSE`, `README.md` and `docs/holocron-qui
 
 ```bash
 # Linux and macOS
-VERSION=1.0.1                                   # the version you want
+VERSION=1.0.2                                   # the version you want
 FILE=holocron_${VERSION}_linux_amd64.tar.gz     # or linux_arm64, darwin_arm64
 BASE=https://github.com/karadimnik/holocron/releases/download/v$VERSION
 curl -fsSL -O "$BASE/$FILE" -O "$BASE/checksums.txt"
@@ -68,7 +68,7 @@ tar -xzf "$FILE"
 
 ```powershell
 # Windows PowerShell
-$Version = "1.0.1"
+$Version = "1.0.2"
 $File = "holocron_${Version}_windows_amd64.zip"
 $Base = "https://github.com/karadimnik/holocron/releases/download/v$Version"
 Invoke-WebRequest "$Base/$File" -OutFile $File

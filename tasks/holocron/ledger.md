@@ -142,6 +142,7 @@ Update this file in the same push as each merge: `git log --first-parent --merge
 | 90d58d1 | 2026-10-28 | Merge Holocron R8: 13 generated golden-run files with a machine path removed and ignored; AGENTS.md push rule corrected |  |
 | 9024726 | 2026-10-28 | Merge Holocron R9: README rewritten for every platform (platforms table, requirements, download and verify from Releases, cross-platform quick start) |  |
 | 933a359 | 2026-10-28 | Merge Holocron R10: quickstart for every platform; Go test that the README download version equals the newest released CHANGELOG version |  |
+| 0fb97db | 2026-10-28 | Merge Holocron R11: Dashboard shows only the Start or Stop control that fits the state; Start right after Stop no longer refused (control-path cache expired) |  |
 
 ## Releases
 
