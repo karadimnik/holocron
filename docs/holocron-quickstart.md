@@ -12,7 +12,7 @@ holocron version
 # holocron <version> (status.json schema 1, windows/amd64, go1.27.2)
 ```
 
-Not in Downloads or a temporary folder: `holocron install` refuses those. `Set-Alias` lasts for this window only; use `C:\Holocron\holocron.exe` elsewhere.
+Not in Downloads or a temporary folder: `holocron install` refuses an executable under a temporary folder, and Downloads is easily cleaned out. `Set-Alias` lasts for this window only; use `C:\Holocron\holocron.exe` elsewhere.
 
 ## 2. The two files, beside `holocron.exe`
 
