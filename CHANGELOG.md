@@ -20,6 +20,17 @@ A version is `MAJOR.MINOR.PATCH`, tagged `vMAJOR.MINOR.PATCH`. The public interf
 
 ## [Unreleased]
 
+### Changed
+
+- Web app: the Dashboard leads with a status summary ("Recording 6 of 6 cameras. Nothing needs attention." or what needs attention, with links to the camera or to Admin > Health) and no longer has a Start or Stop control; while Holocron is not running a notice gives `holocron up --detach`, and an admin gets one Start Holocron button.
+- Web app: switching a camera's recording off no longer asks; a toast offers Undo for 8 s instead.
+- Web app: Stop Holocron moved to Admin > System, in a Danger zone, behind a dialog that says what stops and how to start it again and needs STOP typed; after a stop the page says "Holocron has stopped" instead of "Server unreachable".
+- Web app: on a phone the tab bar scrolls instead of clipping the Admin tab, buttons and switches are at least 44 px tall, and busy and primary buttons meet AA contrast.
+
+### Added
+
+- Web app: Admin > System > Reload configuration (`POST /api/admin/reload`, admin only, audited as `web.admin.reload`).
+
 ## [1.0.2] - 2026-10-28
 
 ### Changed
