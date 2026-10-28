@@ -23,13 +23,13 @@ view-only gate on the TLS listener, the WHEP exception, certificate handling) wa
 
 ## The Controller seam (`controller.go`)
 
-    type Controller interface{ Name(); Status(ctx); Start(ctx, scope); Stop(ctx, scope); SetRecord(ctx, camera, on); TaskStates() }
+    type Controller interface{ Name(); Status(ctx); Start(ctx, scope); Stop(ctx, scope); SetRecord(ctx, camera, on); Reload(ctx); TaskStates() }
 
 `APIController` uses `ctlapi.Dial(root)`:
-`GET /v1/state` (Status, task chips), `POST /v1/stop`, `POST /v1/cameras/{name}/record`, with the request's actor and action id
+`GET /v1/state` (Status, task chips), `POST /v1/stop`, `POST /v1/cameras/{name}/record`, `POST /v1/reload` (the Admin tab's `POST /api/admin/reload`), with the request's actor and action id
 in the headers. The choice is made per request and cached for 5 s (a start or a stop through `POST /api/control` expires it, so a Start right after a Stop is not refused as "already running"): the API controller when `<root>/_state/ctl.addr` answers within
 1 s, the API controller in its "stopped" form when it does not (Start runs `<holocron> up --detach` when
-`Launch` is set, otherwise answers 409 "start it with holocron up"; Stop and the record toggle answer 409).
+`Launch` is set, otherwise answers 409 "start it with holocron up"; Stop, the record toggle and Reload answer 409).
 `GET /api/status` reports the choice in `controller`. In the Go system `PUT /api/cameras` and `PUT /api/config` go to `Options.Settings` (a `SettingsWriter`: the holocron web role
 supplies one over the shared edit helpers of `internal/app` and reloads the supervisor; the page's name and stream rules still run
 first, the address check is the writer's so `host:port` is accepted, and a blank stream is `stream1`; a writer's `invalid` rows
@@ -58,7 +58,8 @@ visible and an unlock applies at once); the rest goes to `Options.Admin` (`Admin
 `webAdmin`; nil: 501). `GET /api/admin/health[?group=a,b]` (`web.admin.health`, read-only, not audited: its records are DEBUG) is
 `AdminTools.Health(ctx, groups) (report, checkedAt, err)`: `holocron doctor --json`'s document run inside the web role, answered as
 `{"ok":true,"health":...,"checkedAt":...}`; an unknown group is a 400 naming `HealthGroups`; the request's own context ends the checks
-when the browser goes away (cmd/holocron shares one run between concurrent requests and caches it 5 s). The Health section of `admin.js`
+when the browser goes away (cmd/holocron shares one run between concurrent requests and caches it 5 s). `POST /api/admin/reload`
+(`web.admin.reload`, audited) is `Controller.Reload` under the lock of the controls: 409 when the supervisor is not running. The Health section of `admin.js`
 fills its nodes with `textContent` only. Key, camera-login, CA and autostart changes take the one-at-a-time lock of Settings and the controls (409 while another runs); role changes and removals are serialised inside `UserAdmin` with their last-admin check. `admin.js` (and so the tab's
 markup) is served to admins only; `index.html` holds an empty placeholder.
 

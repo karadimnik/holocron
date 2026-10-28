@@ -53,6 +53,8 @@ func newFakeSupervisor(t *testing.T, root string) *fakeSupervisor {
 		switch {
 		case r.URL.Path == "/v1/state":
 			io.WriteString(w, fmt.Sprintf(`{"ok":true,"data":{"running":%v,"pid":4242,"cameras":[{"name":"Front","record":true,"alive":true}]}}`, f.running))
+		case r.URL.Path == "/v1/reload":
+			io.WriteString(w, `{"ok":true}`)
 		case r.URL.Path == "/v1/stop":
 			io.WriteString(w, `{"ok":true,"data":{"kind":"requested","reason":"stop requested","survivors":[],"final":true}}`)
 		case strings.HasPrefix(r.URL.Path, "/v1/cameras/") && strings.HasSuffix(r.URL.Path, "/record"):
@@ -146,8 +148,12 @@ func TestControllerAPIWhenEndpointAnswers(t *testing.T) {
 	if code != 200 || body["ok"] != true || !strings.Contains(fmt.Sprint(body["output"]), "Front: record off") {
 		t.Fatalf("record: %d %v", code, body)
 	}
+	code, body = rig.post(t, "/api/admin/reload", `{}`)
+	if code != 200 || body["ok"] != true {
+		t.Fatalf("reload: %d %v", code, body)
+	}
 	calls := sup.callList()
-	if sup.count("POST /v1/stop") != 1 || sup.count(`POST /v1/cameras/Front/record {"enabled":false}`) != 1 {
+	if sup.count("POST /v1/stop") != 1 || sup.count(`POST /v1/cameras/Front/record {"enabled":false}`) != 1 || sup.count("POST /v1/reload") != 1 {
 		t.Errorf("calls %v", calls)
 	}
 	// the actor and the action id travel to the supervisor's records
@@ -194,6 +200,10 @@ func TestControllerAPIBusyIs409(t *testing.T) {
 	if code != http.StatusConflict || body["ok"] != false || !strings.Contains(fmt.Sprint(body["error"]), "another control action") {
 		t.Errorf("%d %v", code, body)
 	}
+	code, body = rig.post(t, "/api/admin/reload", `{}`)
+	if code != http.StatusConflict || body["ok"] != false || !strings.Contains(fmt.Sprint(body["error"]), "another control action") {
+		t.Errorf("reload: %d %v", code, body)
+	}
 }
 
 // The holocron web role with no supervisor: a clear message.
@@ -211,6 +221,9 @@ func TestControllerStoppedWithNoSupervisor(t *testing.T) {
 	}
 	if code, body = rig.post(t, "/api/cameras/Front/record", `{"enabled":false}`); code != http.StatusConflict || !strings.Contains(fmt.Sprint(body["error"]), "holocron cam") {
 		t.Errorf("record: %d %v", code, body)
+	}
+	if code, body = rig.post(t, "/api/admin/reload", `{}`); code != http.StatusConflict || body["ok"] != false || !strings.Contains(fmt.Sprint(body["error"]), "not running") {
+		t.Errorf("reload: %d %v", code, body)
 	}
 	// settings writes without a SettingsWriter are refused plainly
 	mux := http.NewServeMux()
@@ -287,35 +300,113 @@ func TestControllerAPITaskStates(t *testing.T) {
 	}
 }
 
-// The Dashboard offers one control at a time (app.js renderControls): the markup holds exactly a
-// Start and a Stop of scope all, both hidden until the first status says which one fits, inside a
-// named group. The viewers and recorder buttons of the old system are gone.
-func TestDashboardControlsMarkup(t *testing.T) {
+// The Dashboard shows state, not commands (D24): no Start/Stop-everything row; its top is a polite
+// status region; the only button in its markup is the standalone Start, hidden until a status says
+// the supervisor is not running, and never shown to a viewer (app.js renderStandalone).
+func TestDashboardShowsStateNotCommands(t *testing.T) {
 	page, err := staticFiles.ReadFile("static/index.html")
 	if err != nil {
 		t.Fatal(err)
 	}
-	region := regexp.MustCompile(`(?s)<div class="actions" id="controls"([^>]*)>(.*?)</div>`).FindSubmatch(page)
-	if region == nil {
-		t.Fatal("no #controls region in index.html")
+	for _, gone := range []string{`id="controls"`, "Start everything", "Stop everything", `data-action="stop"`} {
+		if strings.Contains(string(page), gone) {
+			t.Errorf("index.html still has %s", gone)
+		}
 	}
-	if !strings.Contains(string(region[1]), `role="group"`) || !strings.Contains(string(region[1]), `aria-label="`) {
-		t.Errorf("the control region has no accessible name: %s", region[1])
+	dash := regexp.MustCompile(`(?s)<section data-tab="dash"[^>]*>(.*?)</section>`).FindSubmatch(page)
+	if dash == nil {
+		t.Fatal("no Dashboard section in index.html")
 	}
-	buttons := regexp.MustCompile(`<button[^>]*>[^<]*</button>`).FindAllString(string(region[2]), -1)
-	want := []string{
-		`<button class="btn primary" data-action="start" data-scope="all" hidden>Start everything</button>`,
-		`<button class="btn danger" data-action="stop" data-scope="all" hidden>Stop everything</button>`,
+	if !strings.Contains(string(dash[1]), `<div id="summary" role="status" aria-live="polite" aria-atomic="true">`) {
+		t.Error("the Dashboard has no polite status summary")
 	}
-	if strings.Join(buttons, "\n") != strings.Join(want, "\n") {
-		t.Errorf("control buttons:\n%s\nwant:\n%s", strings.Join(buttons, "\n"), strings.Join(want, "\n"))
+	if i, j := strings.Index(string(dash[1]), `id="summary"`), strings.Index(string(dash[1]), `id="stats"`); i < 0 || j < i {
+		t.Error("the status summary is not above the figures")
+	}
+	buttons := regexp.MustCompile(`<button[^>]*>[^<]*</button>`).FindAllString(string(dash[1]), -1)
+	if want := `<button class="btn primary" id="startHolocron" type="button" hidden>Start Holocron</button>`; strings.Join(buttons, "\n") != want {
+		t.Errorf("Dashboard buttons:\n%s\nwant:\n%s", strings.Join(buttons, "\n"), want)
 	}
 	app, err := staticFiles.ReadFile("static/app.js")
 	if err != nil {
 		t.Fatal(err)
 	}
+	for _, rule := range []string{`el("standalone").hidden = systemState !== "stopped" && !starting;`, `button.hidden = viewOnly || !accessKnown;`} {
+		if !strings.Contains(string(app), rule) {
+			t.Errorf("app.js lost the rule %s", rule)
+		}
+	}
 	keys := regexp.MustCompile(`"((?:start|stop):\w+)": \{ seconds:`).FindAllStringSubmatch(string(app), -1)
 	if len(keys) != 2 || keys[0][1] != "start:all" || keys[1][1] != "stop:all" {
 		t.Errorf("ACTION_EXPECTATION entries %v, want start:all and stop:all", keys)
+	}
+}
+
+// Switching a camera off asks nothing and offers Undo (D24): toggleRecord holds no confirmation, the
+// Undo calls the same endpoint to switch it back on, and the toast region is a polite live region.
+func TestRecordSwitchOffOffersUndo(t *testing.T) {
+	app, err := staticFiles.ReadFile("static/app.js")
+	if err != nil {
+		t.Fatal(err)
+	}
+	body := regexp.MustCompile(`(?s)\nasync function toggleRecord\(name, enable\) \{(.*?)\n\}\n`).FindSubmatch(app)
+	if body == nil {
+		t.Fatal("no toggleRecord in app.js")
+	}
+	if strings.Contains(string(body[1]), "confirmAction") {
+		t.Error("switching a camera off asks for a confirmation")
+	}
+	if !strings.Contains(string(body[1]), "else undoToast(name);") {
+		t.Error("switching a camera off offers no Undo")
+	}
+	for _, want := range []string{"const UNDO_MS = 8000;", `toggleRecord(name, true);`, `id="toastUndo"`} {
+		if !strings.Contains(string(app), want) {
+			t.Errorf("app.js has no %s", want)
+		}
+	}
+	page, err := staticFiles.ReadFile("static/index.html")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(page), `<div id="toast" role="status" aria-live="polite"></div>`) {
+		t.Error("the toast region is not a polite live region")
+	}
+}
+
+// Stop lives in Admin > System only (D24): its dialog and the reload call are in admin.js, which only
+// an admin receives; the dialog needs STOP typed, starts on Cancel, and the page every user gets has
+// the "Holocron has stopped" panel that replaces "Server unreachable" after a stop it asked for.
+func TestStopIsAdminOnlyAndTypedConfirmed(t *testing.T) {
+	admin, err := staticFiles.ReadFile("static/admin.js")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, want := range []string{`post("api/admin/reload", {}, "aReloadNote")`, `<dialog id="aStopDialog"`, `class="dzone"`,
+		`const stopTyped = () => el("aStopWord").value.trim().toLowerCase() === "stop";`,
+		`<button class="btn" value="cancel" id="aStopCancel" autofocus>Cancel</button>`,
+		`<button class="btn danger" value="stop" id="aStopGo" disabled>Stop Holocron</button>`,
+		`el("aStopDialog").returnValue === "stop" && stopTyped()`, "holocron up --detach"} {
+		if !strings.Contains(string(admin), want) {
+			t.Errorf("admin.js has no %s", want)
+		}
+	}
+	page, err := staticFiles.ReadFile("static/index.html")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, gone := range []string{"aStopDialog", "api/admin/reload", `"stop"`} {
+		if strings.Contains(string(page), gone) {
+			t.Errorf("index.html, served to viewers too, has %s", gone)
+		}
+	}
+	if !strings.Contains(string(page), `<section id="stoppedPanel" class="stopped" hidden`) {
+		t.Error("index.html has no hidden stopped panel")
+	}
+	app, err := staticFiles.ReadFile("static/app.js")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(app), "if (fetchError && stopped) {") || !strings.Contains(string(app), "if (!fetchError && live) stopped = null;") {
+		t.Error("app.js does not show the stopped panel only after its own stop")
 	}
 }

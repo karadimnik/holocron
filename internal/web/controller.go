@@ -36,6 +36,8 @@ type Controller interface {
 	Start(ctx context.Context, scope string) ActionResult
 	Stop(ctx context.Context, scope string) ActionResult
 	SetRecord(ctx context.Context, camera string, enabled bool) ActionResult
+	// Reload asks the supervisor to re-read cameras.json and the configuration now.
+	Reload(ctx context.Context) ActionResult
 	// TaskStates is what the page's "Tasks" strip shows.
 	TaskStates() map[string]TaskInfo
 }
@@ -49,6 +51,7 @@ type apiClient interface {
 	State(ctx context.Context) (ctlapi.State, error)
 	Stop(ctx context.Context, kind string) (ctlapi.StopReport, error)
 	SetRecord(ctx context.Context, camera string, enabled bool) (ctlapi.Changed, error)
+	Reload(ctx context.Context) error
 }
 
 // HolocronLaunch lets the page's Start button run `holocron up --detach`: the web role of
@@ -190,6 +193,24 @@ func (c *APIController) SetRecord(ctx context.Context, camera string, enabled bo
 	} else {
 		res.Output = []string{fmt.Sprintf("%s: already %s", ScrubText(ch.Target), state)}
 	}
+	return res
+}
+
+func (c *APIController) Reload(ctx context.Context) ActionResult {
+	const command = "POST /v1/reload"
+	cl, err := c.client()
+	if err != nil {
+		return conflict(command, "the supervisor is not running: there is nothing to reload")
+	}
+	started := time.Now()
+	ctx, cancel := context.WithTimeout(ctx, recordToggleTimeout)
+	defer cancel()
+	err = cl.Reload(ctx)
+	res := ActionResult{Command: command, Duration: time.Since(started)}
+	if err != nil {
+		return apiFailure(res, err)
+	}
+	res.Output = []string{"reloaded cameras.json and holocron.config.json"}
 	return res
 }
 

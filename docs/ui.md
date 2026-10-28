@@ -96,22 +96,31 @@ The header shows the tabs, a status chip with "updated N s ago" (the page polls 
 
 ### Dashboard
 
-There is no separate health panel on the Dashboard. It shows:
+The Dashboard shows state, not commands. From the top:
 
-- **Banners** (one at a time): "No status to show.", "Nothing is recording." (supervisor stopped, or the status file claims running but its process is gone), "Disk is at its reserve." (the pruner is deleting the oldest footage), "N cameras are not reachable."
+- **Status summary** (`#summary`, a polite live region: `role="status"`, rewritten only when its words change, so a screen reader hears each change once). One verdict, an icon plus a word ("All good", "Needs attention", "Not recording", "No status", "No connection"; colour is never the only cue), and one sentence, built only from `GET /api/status`: `supervisor.running` and `reason`, each camera's `Record` and `Alive`, `Disk.FreeGB` against the reserve, and `Disk.ProjectedDaysRemaining`. Examples: "Recording 6 of 6 cameras. Nothing needs attention.", "2 of 6 cameras are not recording." (each camera's name is a link that scrolls to its row and focuses its Record switch), "Holocron is not recording." (supervisor stopped, or the status file claims running but its process is gone), the disk at its reserve or under 4 days of headroom (with a link to Admin > Health for admins), "This page cannot reach the web app." (no answer, and no stop was asked for). Switched-off cameras are mentioned, not counted as a problem.
 - **Persistent notices** for the last unexpected stop and the last window close, kept after the recorder is back until an admin presses **Dismiss** (`POST /api/acknowledge`). The dismissal is keyed to the event's timestamp and stored beside `status.json` in `camui-acknowledged.json`, so a later stop shows again.
-- **Tiles**: Footage headroom (projected days), Free space, Archive (GB and segments), Recording (cameras recording / enabled).
-- **Cameras table**: camera (with segment count and GB, or "No footage since ..." or the last error), status chip (Recording, Recovering, Camera offline, Not recording, Stopped), input (Relay or Direct), time since the last closed segment, restarts in the last hour, and a **Record** switch.
+- **"Holocron is not running"** notice, only while `supervisor.running` is false. That is the case where this page is served by `holocron web` on its own: under `holocron up` the page stops with the rest, so it never offers a Start there. The notice gives `holocron up --detach`; an admin also gets one **Start Holocron** button (`POST /api/control` `{"scope":"all","action":"start"}`: runs `holocron up --detach` with the web role's own global flags; 409 "the supervisor is already running" when the control endpoint answers; measured 2026-10-28 on a Linux sandbox: 0.52 to 0.54 s). While it runs the button reads "Starting... Ns" and a progress line says what is running and how long it usually takes.
+- **Tiles**: Footage headroom (projected days), Free space, Archive (GB and segments).
+- **Cameras table** (compact rows below 760 px): camera (with segment count and GB, or "No footage since ..." or the last error), status chip (Recording, Recovering, Camera offline, Not recording, Stopped), input (Relay or Direct), time since the last closed segment, restarts in the last hour, and a **Record** switch (`role="switch"`, On or Off in words).
 - **Recent events** and **Services** (two rows: `holocron supervisor` and `holocron web`, plus the supervisor's own verdict).
 - **The full health check is in the Admin tab** (first section, see [The Admin tab](#the-admin-tab)); from a terminal it is `holocron doctor`.
 
-Controls (admins; one action at a time, otherwise 409 "another action is still running"; 180 s limit). The Dashboard shows one control at a time, chosen from `supervisor.running` of the last `GET /api/status`: **Stop everything** while the supervisor runs, **Start everything** while it does not, neither before the first answer or while the web app does not answer. While an action runs only the pressed button shows, with the elapsed seconds; the other control appears within one poll after it ends (`renderControls` in `app.js`). A viewer, or a view-only listener, sees no controls.
+**Record switch** (admins): `POST /api/cameras/{name}/record` with `{"enabled": true|false}`, through the supervisor; 409 naming `holocron cam enable|disable` when the supervisor is not running. Switching off asks nothing; a toast at the bottom of the window says "Recording switched off for <camera>" and offers **Undo** for 8 s (the countdown pauses while the pointer or the focus is on it), which switches it back on through the same endpoint; the switch itself is always the way back. Switching on needs nothing. Results are announced through a polite live region; one action at a time (409 "another action is still running").
 
-| Control | What the code does (`controller.go`, `control.go`) |
-|---|---|
-| Start everything | When the supervisor's control endpoint (`<root>/_state/ctl.addr`) does not answer, runs `holocron up --detach` with the web role's own global flags. When it answers: 409 "the supervisor is already running". Measured 2026-10-28 on a Linux sandbox with no camera recording: 0.52 to 0.54 s through the page. |
-| Stop everything | Asks first, then calls the supervisor's stop endpoint (`POST /v1/stop`): the cameras' ffmpeg, the live view and the relay stop in that order. Under `holocron up` the host then ends the web app too, so the page loses its server (header "Server unreachable") and Holocron is started again with `holocron up`; a web app run alone with `holocron web` stays and offers Start. 409 when nothing is running. Measured: 0.01 s on the same sandbox. |
-| Record switch (per camera) | `POST /api/cameras/{name}/record` with `{"enabled": true|false}`, through the supervisor. When the supervisor is not running: 409, and the message names `holocron cam enable|disable`. |
+Reloading the configuration and stopping Holocron are in **Admin > System**, not on the Dashboard (see [The Admin tab](#the-admin-tab)).
+
+### Design principles
+
+The Dashboard and Admin > System follow these, each from a primary source (fetched 2026-10-28):
+
+- **Status first, at a glance**: the top answers "is Holocron recording, and does anything need me?" without scrolling or clicking ([NN/g, 10 usability heuristics: visibility of system status](https://www.nngroup.com/articles/ten-usability-heuristics/); [NN/g, dashboards: at-a-glance information](https://www.nngroup.com/articles/dashboards-preattentive/)).
+- **Show state, not commands; no control that cannot work**: Start appears only where it can run, Stop only where it belongs ([NN/g, visibility of system status](https://www.nngroup.com/articles/visibility-system-status/); restart lives in settings in [Home Assistant](https://www.home-assistant.io/common-tasks/general/restarting/) and [Frigate](https://docs.frigate.video/configuration/config/)).
+- **Routine actions without confirmation, with undo**: the Record switch and Reload ([NN/g, confirmation dialogs](https://www.nngroup.com/articles/confirmation-dialog/); [Apple HIG, alerts](https://developer.apple.com/design/human-interface-guidelines/alerts); [Material components, snackbar with an undo action](https://github.com/material-components/material-components-android/blob/master/docs/components/Snackbar.md)).
+- **A typed confirmation only for the disruptive action, away from routine use**: Stop in a Danger zone, a dialog that says what stops and how to start again, STOP typed ([NN/g, confirmation dialogs](https://www.nngroup.com/articles/confirmation-dialog/); [Primer, confirmation dialog](https://primer.style/product/components/confirmation-dialog/guidelines)).
+- **Dialog focus**: initial focus on Cancel, Tab stays inside, Escape cancels, focus returns to the opener ([WAI-ARIA APG, modal dialog](https://www.w3.org/WAI/ARIA/apg/patterns/dialog-modal/); [Primer, confirmation dialog accessibility](https://primer.style/product/components/confirmation-dialog/accessibility)).
+- **Explain what happened**: "Holocron has stopped" instead of "Server unreachable" ([NN/g, visibility of system status](https://www.nngroup.com/articles/visibility-system-status/)).
+- **Accessible status**: live regions for the summary and results ([WCAG 2.2, 4.1.3 Status Messages](https://www.w3.org/WAI/WCAG22/Understanding/status-messages.html)); colour never alone ([WCAG 2.2, 1.4.1 Use of Color](https://www.w3.org/WAI/WCAG22/Understanding/use-of-color.html)); the Undo countdown pauses ([WCAG 2.2, 2.2.1 Timing Adjustable](https://www.w3.org/WAI/WCAG22/Understanding/timing-adjustable.html)); 44 px targets on a phone ([WCAG 2.2, 2.5.8 Target Size](https://www.w3.org/WAI/WCAG22/Understanding/target-size-minimum.html)); text contrast at least 4.5:1.
 
 ### Settings
 
@@ -261,10 +270,11 @@ Admins only; its markup and code are in `admin.js`, which only an admin receives
 | Certificate authority | Fingerprint, download of the CA certificate, install steps, rotate after typing `ROTATE`. | `holocron tls ca`, `tls print`, `tls rotate` |
 | Maintenance | A preview of the pruner (deletes nothing), the archive table, log levels (running and configured) with a run-time change, optionally saved. | `holocron prune --dry-run`, `holocron archive stats`, `holocron log level` |
 | Autostart | Status and enable or disable; a checkbox to enable despite an enabled PowerShell-system task. Creating or removing the entry stays on the command line. | `holocron autostart status`, `autostart enable`, `autostart disable` |
+| System (last) | **Reload configuration** (`POST /api/admin/reload`, no confirmation): the supervisor re-reads `cameras.json` and `holocron.config.json` now; live view on or off applies at once, other changed settings still need a restart; 409 when the supervisor is not running. A **Danger zone** with **Stop Holocron...**: a dialog lists what stops (every camera's ffmpeg recorder, live view and the relay, and under `holocron up` the host and this page), that nothing is recorded until Holocron is started again, and how (`holocron up --detach`, signing in again when autostart is on, or the service manager); **Stop Holocron** enables only once `STOP` is typed (any case, spaces trimmed); the focus starts on Cancel and Escape cancels. It sends `POST /api/control` `{"scope":"all","action":"stop"}` (`POST /v1/stop`: cameras, then live view, then relay). When the server then stops answering, the page shows **Holocron has stopped** (when, why the page is gone, how to start it again, **Check again**; it reloads by itself when the server answers) instead of "This page cannot reach the web app". | the control API's `POST /v1/reload`; `holocron down` |
 
 **Health.** `GET /api/admin/health[?group=recording,live]` answers `{"ok":true,"health":<the document of holocron doctor --json>,"checkedAt":<time>}`; an unknown group is 400 and the message names the valid ones. It runs the same check table as `holocron doctor` inside the web role; the page gives up after 20 s (`admin.js`). Per `internal/web/README.md` (documented-only) concurrent requests share one run and a run younger than 5 s is reused. It is a read-only poll: not audited, its records are DEBUG. The `environment` line describes the web app's own environment, not your terminal.
 
-**On the command line only, on purpose:** `holocron secret import`, `holocron prune --now --yes`, `holocron install` and `holocron uninstall`, and `holocron up`, `down`, `restart` beyond the Start and Stop buttons.
+**On the command line only, on purpose:** `holocron secret import`, `holocron prune --now --yes`, `holocron install` and `holocron uninstall`, and `holocron up`, `down`, `restart` beyond the Dashboard's standalone Start and the Admin tab's Stop.
 
 ## Routes
 
@@ -280,6 +290,7 @@ Admins only; its markup and code are in `admin.js`, which only an admin receives
 | `POST /api/control` | admin | Start or stop (`scope` all, recorder, dashboard; `action` start, stop) |
 | `POST /api/cameras/{name}/record` | admin | Record on or off |
 | `POST /api/acknowledge` | admin | Dismiss a persistent notice |
+| `POST /api/admin/reload` | admin | Reload the configuration (Admin > System; `web.admin.reload`, audited) |
 | `GET`, `PUT /api/cameras` | admin | Read or replace the camera list |
 | `GET`, `PUT /api/config` | admin | Read or write the four Settings keys |
 | `GET /api/footage`, `/api/clip` | viewer | Footage index; one clip as fragmented MP4 |

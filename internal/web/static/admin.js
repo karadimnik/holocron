@@ -127,7 +127,44 @@
       </div>
       <p class="hint">Creating or removing the autostart entry stays on the command line (<code>holocron install</code>, <code>holocron uninstall</code>): they create operating-system entries, which a browser should not.</p>
     </div>
-  </div>`;
+  </div>
+
+  <div class="panel apanel" id="aSystemPanel">
+    <header><h2>System</h2></header>
+    <div class="form">
+      <h3>Reload configuration</h3>
+      <p class="hint">Re-reads <code>cameras.json</code> and <code>holocron.config.json</code> now instead of at the next check. Live view on or off applies at once; other changed settings still need a restart. Recording carries on.</p>
+      <div class="actions"><button class="btn" id="aReload" type="button">Reload configuration</button><span class="formnote" id="aReloadNote" role="status"></span></div>
+      <div class="dzone" role="group" aria-labelledby="aDangerTitle">
+        <h3 id="aDangerTitle">Danger zone</h3>
+        <div class="dzrow">
+          <div><b>Stop Holocron</b>
+            <p class="hint">Stops recording on every camera, live view and the relay. When Holocron was started with <code>holocron up</code> (the usual way), this page stops too.</p></div>
+          <button class="btn danger" id="aStop" type="button" aria-haspopup="dialog">Stop Holocron…</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <dialog id="aStopDialog" class="dangerdialog" aria-labelledby="aStopTitle" aria-describedby="aStopBody">
+    <form method="dialog" id="aStopForm">
+      <h2 id="aStopTitle">Stop Holocron?</h2>
+      <div id="aStopBody">
+        <p>This stops everything Holocron runs on this PC:</p>
+        <ul class="dlist">
+          <li>recording on every camera (the ffmpeg recorders)</li>
+          <li>live view and the camera relay</li>
+          <li>when it was started with <code>holocron up</code> (the usual way): the Holocron host and this web page, which stops answering</li>
+        </ul>
+        <p><b>No footage is recorded until Holocron is started again.</b> To start it again: run <code>holocron up --detach</code> on the PC, sign in again (the logon task, systemd unit or launchd agent starts it when autostart is on), or start it from your service manager.</p>
+      </div>
+      <div class="field"><label for="aStopWord">Type STOP to confirm</label><input id="aStopWord" autocomplete="off" spellcheck="false" autocapitalize="characters"></div>
+      <div class="actions">
+        <button class="btn" value="cancel" id="aStopCancel" autofocus>Cancel</button>
+        <button class="btn danger" value="stop" id="aStopGo" disabled>Stop Holocron</button>
+      </div>
+    </form>
+  </dialog>`;
 
   let built = false;
   let users = { users: [], self: "" };
@@ -545,6 +582,29 @@
     loadAutostart();
   }
 
+  // ---------------------------------------------------------------- system
+  // Reload is routine and harmless: no confirmation. Stop is the one action that ends recording and,
+  // under holocron up, this page: it sits in the Danger zone, away from routine use, and its dialog
+  // says what stops and how to start it again, and needs the word STOP typed before it enables.
+  // The focus starts on Cancel; Escape cancels; the focus returns to the opener.
+  const stopTyped = () => el("aStopWord").value.trim().toLowerCase() === "stop";
+
+  function openStop() {
+    const dialog = el("aStopDialog");
+    el("aStopWord").value = "";
+    el("aStopGo").disabled = true;
+    dialog.returnValue = "";
+    dialog.showModal();
+    el("aStopCancel").focus();
+  }
+
+  function closedStop() {
+    const go = el("aStopDialog").returnValue === "stop" && stopTyped();
+    el("aStopWord").value = "";
+    el("aStop").focus();
+    if (go) stopHolocron();
+  }
+
   // ---------------------------------------------------------------- wiring
   function build() {
     const section = document.querySelector('section[data-tab="admin"]');
@@ -571,6 +631,16 @@
     el("aAutoOn").onclick = () => setAutostart(true);
     el("aAutoOff").onclick = () => setAutostart(false);
     el("aHRefresh").onclick = loadHealth;
+    el("aReload").onclick = () => post("api/admin/reload", {}, "aReloadNote");
+    el("aStop").onclick = openStop;
+    el("aStopWord").oninput = () => (el("aStopGo").disabled = !stopTyped());
+    el("aStopWord").onkeydown = (event) => {
+      // Enter in the field would submit with the first button, Cancel: confirm only when typed.
+      if (event.key !== "Enter") return;
+      event.preventDefault();
+      if (stopTyped()) el("aStopGo").click();
+    };
+    el("aStopDialog").onclose = closedStop;
     el("aHAuto").onchange = setHealthAuto;
     document.addEventListener("visibilitychange", () => {
       // back on the page: catch up at once when the last run is older than one interval

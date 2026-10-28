@@ -64,6 +64,7 @@ func (f *fakeCtl) Start(_ context.Context, scope string) ActionResult {
 }
 func (f *fakeCtl) Stop(_ context.Context, scope string) ActionResult { return f.note("stop " + scope) }
 func (f *fakeCtl) TaskStates() map[string]TaskInfo                   { return map[string]TaskInfo{} }
+func (f *fakeCtl) Reload(context.Context) ActionResult               { return f.note("reload") }
 func (f *fakeCtl) SetRecord(_ context.Context, c string, on bool) ActionResult {
 	return f.note("record " + c + " " + map[bool]string{true: "on", false: "off"}[on])
 }
