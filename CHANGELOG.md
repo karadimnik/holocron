@@ -20,6 +20,10 @@ A version is `MAJOR.MINOR.PATCH`, tagged `vMAJOR.MINOR.PATCH`. The public interf
 
 ## [Unreleased]
 
+## [1.0.1] - 2026-10-28
+
+The first release built and published by the release pipeline. The program is the same as 1.0.0: the tag `v1.0.0` was made before the pipeline existed and has no downloadable files, so this version is the first one with archives, checksums, SBOMs and build attestations. Everything new is in the release process.
+
 ### Added
 
 - A release process: pushing a `vX.Y.Z` tag of a `main` commit builds the release with GoReleaser (`.goreleaser.yaml`, `.github/workflows/release.yml`) and publishes a GitHub Release with archives for windows/amd64, linux/amd64, linux/arm64 and darwin/arm64, `checksums.txt` (SHA-256), an SPDX SBOM per archive and a build provenance attestation; the notes are this file's section for the version. Builds use `-trimpath` and the commit time, so the same commit builds the same bytes.
@@ -44,5 +48,6 @@ The first version of Holocron in its own repository: a Go network video recorder
 - Builds for Windows (first-class and live), Linux and macOS, cross-compiled and tested in CI.
 - Licence: [PolyForm Noncommercial License 1.0.0](LICENSE) (decision D22).
 
-[Unreleased]: https://github.com/karadimnik/holocron/compare/v1.0.0...HEAD
+[Unreleased]: https://github.com/karadimnik/holocron/compare/v1.0.1...HEAD
+[1.0.1]: https://github.com/karadimnik/holocron/compare/v1.0.0...v1.0.1
 [1.0.0]: https://github.com/karadimnik/holocron/releases/tag/v1.0.0
