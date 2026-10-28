@@ -39,7 +39,7 @@ nav.tabs button:hover:not([aria-current="page"]){background:var(--surface-1)}
 .actions{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
 .btn{background:var(--surface-2);border:1px solid var(--line);border-radius:8px;padding:8px 14px;color:var(--ink)}
 .btn:hover:not([disabled]){background:var(--surface-3)}
-.btn.primary{background:var(--accent);border-color:transparent;color:#fff}
+.btn.primary{background:#2b6fd6;border-color:transparent;color:#fff} /* white on it: 4.83:1 (AA); --accent gave 3.64 */
 .btn.danger{border-color:#5a2b2b;color:#f0b4b4}
 .btn[disabled]{opacity:.45;cursor:not-allowed}
 
@@ -112,6 +112,12 @@ tr:hover td{background:#1e1e1c}
 /* layout A above the phone breakpoint, layout C below it */
 #camsC{display:none}
 @media(max-width:760px){
+  /* The tab bar gets its own full-width line and scrolls sideways rather than clipping the last
+     tab (Admin was cut at 390 px); a focused tab is scrolled into view by the browser. */
+  nav.tabs{order:3;flex:1 1 100%;overflow-x:auto;scrollbar-width:thin}
+  nav.tabs button{flex:none;min-height:44px}
+  .btn{min-height:44px}
+  .btn.small{min-height:44px}
   #camsA{display:none}
   #camsC{display:block}
   .app{padding:14px}
@@ -168,7 +174,9 @@ footer.note{margin-top:22px;color:var(--ink-3);font-size:12px;border-top:1px sol
 .formnote.good{color:#9ad39a}
 
 /* ---- pending: an action takes up to a minute, so it must never look frozen ---- */
-.btn[aria-busy="true"]{position:relative;overflow:hidden;color:var(--ink-3);font-variant-numeric:tabular-nums}
+.btn[aria-busy="true"]{position:relative;overflow:hidden;color:var(--ink-2);font-variant-numeric:tabular-nums}
+/* A busy button is disabled but must stay legible: ink-2 on surface-2 is 8.78:1, where the dimmed grey was below 3:1. */
+.btn[aria-busy="true"][disabled]{opacity:1}
 .btn[aria-busy="true"]::after{content:"";position:absolute;inset:auto 8px 6px 8px;height:2px;
   background:linear-gradient(90deg,transparent,var(--accent),transparent);
   animation:sweep 1.1s linear infinite}
@@ -278,15 +286,15 @@ dialog p{margin:0;color:var(--ink-2)}
   .row>*[data-label]::before{content:attr(data-label);display:block;font-size:11px;
     color:var(--ink-3);text-transform:uppercase;letter-spacing:.04em;margin-bottom:4px}
   .row .tglwrap{justify-content:flex-start}
-  .row .linkbtn{justify-self:start;padding:8px 0;min-height:36px}
+  .row .linkbtn{justify-self:start;padding:8px 0;min-height:44px}
   .field{max-width:none}
 
   /* Tap targets. A 40x22 switch is comfortably clickable with a mouse and
-     misses on a thumb. 56x34 with a 26 px knob meets the 34 px guideline
-     exactly - measured at a genuine 390 px, where 52x32 came back 2 px short. */
-  .tgl{width:56px;height:34px;border-radius:17px}
-  .tgl i{top:4px;left:4px;width:26px;height:26px}
-  .tgl[aria-checked="true"] i{left:26px}
+     misses on a thumb. 68x44 with a 34 px knob meets the 44 px target size -
+     measured at a genuine 390 px. */
+  .tgl{width:68px;height:44px;border-radius:22px}
+  .tgl i{top:5px;left:5px;width:34px;height:34px}
+  .tgl[aria-checked="true"] i{left:29px}
 
   /* Footage on a phone: the pickers are capped so the player is on screen
      without scrolling past two full lists, and every row is a tap target. */
