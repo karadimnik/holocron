@@ -140,6 +140,7 @@ Update this file in the same push as each merge: `git log --first-parent --merge
 | 8070535 | 2026-10-28 | Merge Holocron B6: one winner per moved file on Linux and macOS (renameat2 RENAME_NOREPLACE, race-free link protocol, interrupted moves reported as Recovered) |  |
 | 5002a66 | 2026-10-28 | Merge Holocron R7: release process - GoReleaser build of tagged versions, attestations and SBOM, release-check CI job, changelog, runbook, tag ruleset file (D24) |  |
 | 90d58d1 | 2026-10-28 | Merge Holocron R8: 13 generated golden-run files with a machine path removed and ignored; AGENTS.md push rule corrected |  |
+| 9024726 | 2026-10-28 | Merge Holocron R9: README rewritten for every platform (platforms table, requirements, download and verify from Releases, cross-platform quick start) |  |
 
 ## Releases
 
