@@ -57,3 +57,6 @@ tls/
 
 # GoReleaser output (goreleaser release --snapshot, see docs/releasing.md)
 /dist/
+
+# Output of local golden runs (carries machine-specific paths): never commit
+testdata/golden/status/generated/
