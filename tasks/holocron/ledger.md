@@ -146,3 +146,4 @@ One row per published version (tag, date, what it contains, verification done). 
 
 | Tag | Date | Contents | Verified |
 |---|---|---|---|
+| v1.0.1 | 2026-10-28 | First pipeline-built release: the program of 1.0.0 plus the release process (4 archives, checksums.txt, 4 SBOMs, build attestations) | Operator confirmed the release; adviser verified the 8 files against checksums.txt (8 OK) and the linux/amd64 binary prints v1.0.1. Attestation: not checked from here (no gh CLI); command in docs/releasing.md |
