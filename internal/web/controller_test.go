@@ -249,6 +249,27 @@ func TestControllerStartRunsUpDetach(t *testing.T) {
 	}
 }
 
+// A Start right after a Stop runs `up --detach`: the stop expired the cached choice, so the start
+// sees that the endpoint no longer answers instead of refusing with "already running".
+func TestControllerStartRightAfterStop(t *testing.T) {
+	rig := newControllerRig(t)
+	sup := newFakeSupervisor(t, rig.root)
+	exe, err := os.Executable()
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("WEB_TEST_HELPER", "1")
+	rig.api.launch = &HolocronLaunch{Exe: exe, Args: []string{"-test.run=TestControllerStartRunsUpDetach", "--"}}
+	if code, body := rig.post(t, "/api/control", `{"scope":"all","action":"stop"}`); code != 200 || body["ok"] != true {
+		t.Fatalf("stop: %d %v", code, body)
+	}
+	sup.srv.Close() // the supervisor has stopped
+	code, body := rig.post(t, "/api/control", `{"scope":"all","action":"start"}`)
+	if code != 200 || body["ok"] != true || body["command"] != "holocron up --detach" {
+		t.Errorf("start right after the stop: %d %v", code, body)
+	}
+}
+
 // The tasks strip shows the supervisor and the web app themselves.
 func TestControllerAPITaskStates(t *testing.T) {
 	rig := newControllerRig(t)
