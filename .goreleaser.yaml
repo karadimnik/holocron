@@ -1,0 +1,70 @@
+# GoReleaser configuration for Holocron releases. Run by .github/workflows/release.yml on a v* tag
+# and as a snapshot by the release-check job in ci.yml. Runbook: docs/releasing.md
+version: 2
+
+project_name: holocron
+
+builds:
+  - id: holocron
+    main: ./cmd/holocron
+    binary: holocron
+    env:
+      - CGO_ENABLED=0
+    # the targets the build job in ci.yml cross-compiles
+    targets:
+      - windows_amd64
+      - linux_amd64
+      - linux_arm64
+      - darwin_arm64
+    flags:
+      - -trimpath
+      - -buildvcs=false
+    # .Version has the leading v stripped; put it back so `holocron version` prints the tag, as build-holocron.sh does
+    ldflags:
+      - -s -w -X main.version=v{{ .Version }} -X holocron/internal/web.version=v{{ .Version }}
+    mod_timestamp: "{{ .CommitTimestamp }}"
+
+archives:
+  - id: holocron
+    ids: [holocron]
+    formats: [tar.gz]
+    format_overrides:
+      - goos: windows
+        formats: [zip]
+    builds_info:
+      owner: root
+      group: root
+      mtime: "{{ .CommitDate }}"
+    # fixed owner, mode and time, so the archive bytes do not depend on the machine that built them
+    files:
+      - src: LICENSE
+        info: &fileinfo
+          owner: root
+          group: root
+          mode: 0644
+          mtime: "{{ .CommitDate }}"
+      - src: README.md
+        info: *fileinfo
+      - src: docs/holocron-quickstart.md
+        info: *fileinfo
+
+checksum:
+  name_template: checksums.txt
+  algorithm: sha256
+
+sboms:
+  - artifacts: archive
+
+snapshot:
+  version_template: "{{ incpatch .Version }}-snapshot-{{ .ShortCommit }}"
+
+# The release notes are the version's CHANGELOG.md section, passed by release.yml with --release-notes.
+# A draft: release.yml publishes it after the attestation step, so nothing is public until every step passed;
+# a re-run replaces a draft left by a failed run.
+release:
+  github:
+    owner: karadimnik
+    name: holocron
+  draft: true
+  replace_existing_draft: true
+  prerelease: auto
