@@ -9,6 +9,7 @@
 | `lint-vet` | ubuntu | `gofmt -l cmd internal` prints nothing; `go vet ./...` is clean for `GOOS=linux`, `windows` and `darwin`. |
 | `test (ubuntu-latest)` and `test (windows-latest)` | hosted runners | ffmpeg installed, then `go test -race -count=1 -p 1 -v ./...`, then the opt-in real-process and real-ffmpeg tests (below). A failure here fails the run. |
 | `test (macos-latest)` | hosted runner | The same steps with `continue-on-error`: macOS is paper-only today, so it reports and never fails the run. |
+| `release-check` | ubuntu | `goreleaser check`, then `goreleaser release --snapshot --clean --skip=publish,sign,announce` with the configuration a tag uses (`.goreleaser.yaml`); the four archives and their SBOMs exist, `checksums.txt` verifies, and the linux/amd64 binary's `holocron version` prints the snapshot version. Nothing is uploaded. |
 | `build (target)` | ubuntu | `holocron` (`./cmd/holocron`) compiles for `windows/amd64`, `linux/amd64`, `linux/arm64`, `darwin/arm64`, with `CGO_ENABLED=0`. Nothing is uploaded. |
 
 Go comes from `go.mod` (`go-version-file`), so the runner builds with the same minor release the module asks for. `GOTOOLCHAIN=local` keeps `go` from fetching a different one. ffmpeg comes from `apt` (Ubuntu), a pinned Chocolatey package (Windows) and Homebrew (macOS); the product needs 5.0 or later and the step prints the version that was installed. The Chocolatey install is tried up to 3 times, 10 s apart, because a download from its feed fails now and then; only the third failure fails the job.
@@ -42,4 +43,4 @@ for t in windows/amd64 linux/amd64 linux/arm64 darwin/arm64; do CGO_ENABLED=0 GO
 - **Real cameras, a real relay, the shadow run** ([shadow-runbook.md](../tasks/holocron/shadow-runbook.md)) and anything that records to a real archive: no camera, address or machine name is in the repository, and CI has none to give.
 - **Windows service and scheduled-task install**, autostart and the Event Log or toast alerts: they change the machine and need elevation. Their logic is covered by the fakes in the Go tests.
 - **MediaMTX** and the full end-to-end run (`TestEndToEnd`, `TestSupervisorRealIntegration`, `TestThrowawayMediaMTX`).
-- **Release artifacts.** Builds are compiled to prove they compile and are not uploaded.
+- **Release artifacts.** CI uploads nothing. Releases are built by `.github/workflows/release.yml` from a pushed `vX.Y.Z` tag: [releasing.md](releasing.md). `release-check` above builds the same archives as a snapshot so a broken release configuration shows on `main` first. The `.github/dependabot.yml` file opens a weekly grouped pull request when a pinned action has a newer release.

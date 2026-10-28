@@ -24,11 +24,13 @@ Branch `main`. Rules for agents are in AGENTS.md. Facts in the documents below c
 - [Comparing two archives](docs/shadow.md): `holocron archive compare`, read-only on both roots
 - [Development](docs/development.md): building, testing, the documentation checks, golden files
 - [Continuous integration](docs/ci.md): what runs, how to run the same locally
+- [Releasing](docs/releasing.md): when a version is cut, the advisor's release checklist, what the release workflow does, rollback, how to verify a download, the one-time repository settings
+- [Changelog](CHANGELOG.md): every version's changes and the versioning policy
 - [Cutover plan and record](tasks/holocron/cutover-plan.md): decisions, stop rules, the 22 Oct 2026 record and its findings; the step-by-step [cutover runbook](tasks/holocron/cutover-runbook.md) and [shadow runbook](tasks/holocron/shadow-runbook.md) are historical records
 
 ## Design and decisions
 
-- [High-level design](tasks/holocron/os-independent-hld.md): rules R1 and R2, architecture, technology choices, decisions D2 to D20 (D20, spool and day folders, supersedes D18)
+- [High-level design](tasks/holocron/os-independent-hld.md): rules R1 and R2, architecture, technology choices, decisions D2 to D24 (D20, spool and day folders, supersedes D18; D24, the release process)
 - [Low-level design](tasks/holocron/os-independent-lld.md): per-package plan and the work items
 - [Supervisor inventory](tasks/holocron/spec/inventory-supervisor.md): the guarantees G1 to G15 and the status.json fields of the system Holocron reproduces
 - [Commission ledger](tasks/holocron/ledger.md): every merge into `main`

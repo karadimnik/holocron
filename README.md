@@ -14,6 +14,10 @@ Holocron turns your PC into a 24/7 home security recorder. One small program rec
 * **`holocron doctor`**, a read-only health check that groups its findings (setup, recording, connections, live, web, storage, system) and gives a fix for every problem.
 * **One executable** for every role and command, `holocron` (`holocron.exe` on Windows). Windows first and live there since 22 Oct 2026; Linux and macOS builds are cross-compiled and tested in CI.
 
+## Download
+
+Built releases for Windows (amd64), Linux (amd64, arm64) and macOS (arm64) are on the [Releases page](https://github.com/karadimnik/holocron/releases), each with `checksums.txt`, an SBOM per archive and a build provenance attestation: check a download with `sha256sum --ignore-missing -c checksums.txt` and `gh attestation verify <file> --repo karadimnik/holocron`. How releases are made and verified: [docs/releasing.md](docs/releasing.md); what changed: [CHANGELOG.md](CHANGELOG.md).
+
 ## Quick start
 
 1. Put `holocron.exe` in a permanent folder (`./build-holocron.sh` in WSL builds it; see [docs/development.md](docs/development.md)).
@@ -28,7 +32,7 @@ The same four steps with the result of each, and Linux and macOS, are in [the qu
 * **Guides** - [quickstart](docs/holocron-quickstart.md) and the [cheat sheet](docs/holocron-cheatsheet.md) (commands by intent, files, ports, exit codes, alerts, the likeliest problems).
 * **Operating** - [the web app](docs/ui.md), [autostart](docs/autostart.md), [alerts](docs/alerts.md), [configuration](docs/configuration.md) (every key: [internal/config/KEYS.md](internal/config/KEYS.md)), [troubleshooting](docs/troubleshooting.md), [rollback](docs/rollback.md), [known limitations](docs/limitations.md), [comparing two archives](docs/shadow.md).
 * **How it works** - [docs/how-it-works.md](docs/how-it-works.md).
-* **Development** - [building, testing and the documentation checks](docs/development.md), [continuous integration](docs/ci.md).
+* **Development** - [building, testing and the documentation checks](docs/development.md), [continuous integration](docs/ci.md), [releasing](docs/releasing.md) and the [changelog](CHANGELOG.md).
 * **For AI agents** - [docs/ai/holocron-for-agents.md](docs/ai/holocron-for-agents.md), [AGENTS.md](AGENTS.md) and [llms.txt](llms.txt).
 * **Design, decisions and records** - `tasks/holocron/`, with the records of the cutover from the PowerShell system ([runbook](tasks/holocron/cutover-runbook.md), [plan and record](tasks/holocron/cutover-plan.md)) and the shadow run before it ([runbook](tasks/holocron/shadow-runbook.md)).
 

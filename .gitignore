@@ -54,3 +54,6 @@ tls/
 
 /holocron.exe
 /holocron
+
+# GoReleaser output (goreleaser release --snapshot, see docs/releasing.md)
+/dist/

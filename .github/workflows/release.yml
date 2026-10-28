@@ -1,0 +1,81 @@
+# Holocron release: a pushed vX.Y.Z tag on a commit of main becomes a GitHub Release with the four archives,
+# checksums.txt, an SBOM per archive and a build provenance attestation. GITHUB_TOKEN only, no other secrets.
+# Runbook: docs/releasing.md
+name: release
+
+on:
+  push:
+    tags: ['v[0-9]+.[0-9]+.[0-9]+*']
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false # never stop a release half way
+
+env:
+  GOTOOLCHAIN: local # use the Go that setup-go installed, never download another
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: write # create the release and upload its assets
+      id-token: write # sign the attestation (Sigstore keyless, through GitHub's OIDC token)
+      attestations: write # store the attestation
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0 # the whole history: the guard needs origin/main, GoReleaser the previous tag
+          persist-credentials: false
+      - name: Guard - SemVer tag, on main, with a CHANGELOG.md section
+        env:
+          TAG: ${{ github.ref_name }}
+        run: |
+          if ! [[ "$TAG" =~ ^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(-[0-9A-Za-z.-]+)?$ ]]; then
+            echo "::error::tag $TAG is not vMAJOR.MINOR.PATCH[-PRERELEASE]"; exit 1
+          fi
+          commit="$(git rev-parse "$TAG^{commit}")"
+          if ! git merge-base --is-ancestor "$commit" origin/main; then
+            echo "::error::tag $TAG points to $commit, which is not on main"; exit 1
+          fi
+          version="${TAG#v}"
+          awk -v head="## [$version]" '
+            /^## \[/ { if (found) exit; if (index($0, head) == 1) { found = 1; next } }
+            /^\[[^]]+\]: / { if (found) exit }
+            found { print }
+            END { if (!found) exit 1 }
+          ' CHANGELOG.md > "$RUNNER_TEMP/release-notes.md" || { echo "::error::CHANGELOG.md has no section ## [$version]"; exit 1; }
+          grep -q '[^[:space:]]' "$RUNNER_TEMP/release-notes.md" || { echo "::error::the CHANGELOG.md section for $version is empty"; exit 1; }
+          cat "$RUNNER_TEMP/release-notes.md"
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+          cache: false # no dependencies, so no go.sum to key a cache on
+      - uses: anchore/sbom-action/download-syft@66cbf4bc1f1c0d2edc94016e65bc221b6bb0ad6c # v0.24.3
+      # GoReleaser publishes a draft (draft: true in .goreleaser.yaml); the last step publishes it once the attestation exists
+      - uses: goreleaser/goreleaser-action@a4f02ab5355a589de60d917a659ce617ed19b3de # v7.3.0
+        with:
+          distribution: goreleaser
+          version: v2.19.0
+          args: release --clean --release-notes ${{ runner.temp }}/release-notes.md
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4.2.2
+        with:
+          subject-path: |
+            dist/*.tar.gz
+            dist/*.zip
+            dist/checksums.txt
+      - name: Publish the draft release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ github.ref_name }}
+        run: |
+          if [[ "$TAG" == *-* ]]; then
+            gh release edit "$TAG" --repo "$GITHUB_REPOSITORY" --draft=false
+          else
+            gh release edit "$TAG" --repo "$GITHUB_REPOSITORY" --draft=false --latest
+          fi

@@ -180,3 +180,40 @@ jobs:
           TARGET: ${{ matrix.target }}
           CGO_ENABLED: "0"
         run: GOOS="${TARGET%/*}" GOARCH="${TARGET#*/}" go build ./cmd/holocron
+
+  # The release configuration, built as a snapshot (nothing published), so config rot shows before a tag. docs/releasing.md
+  release-check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0 # GoReleaser derives the snapshot version from the latest tag
+          persist-credentials: false
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+          cache: false
+      - uses: anchore/sbom-action/download-syft@66cbf4bc1f1c0d2edc94016e65bc221b6bb0ad6c # v0.24.3
+      - uses: goreleaser/goreleaser-action@a4f02ab5355a589de60d917a659ce617ed19b3de # v7.3.0
+        with:
+          distribution: goreleaser
+          version: v2.19.0
+          install-only: true
+      - name: goreleaser check
+        run: goreleaser check
+      - name: Snapshot release
+        run: goreleaser release --snapshot --clean --skip=publish,sign,announce
+      - name: Archives, checksums and version
+        run: |
+          version="$(jq -r .version dist/metadata.json)"
+          for t in windows_amd64.zip linux_amd64.tar.gz linux_arm64.tar.gz darwin_arm64.tar.gz; do
+            f="dist/holocron_${version}_$t"
+            test -s "$f" || { echo "::error::$f is missing"; exit 1; }
+            test -s "$f.sbom.json" || { echo "::error::$f.sbom.json is missing"; exit 1; }
+          done
+          (cd dist && sha256sum -c checksums.txt)
+          tar -xzf "dist/holocron_${version}_linux_amd64.tar.gz" -C "$RUNNER_TEMP" holocron
+          got="$("$RUNNER_TEMP/holocron" version)"
+          echo "$got"
+          case "$got" in "holocron v$version "*) ;; *) echo "::error::holocron version printed '$got', expected v$version"; exit 1 ;; esac
