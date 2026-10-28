@@ -8,7 +8,7 @@ Branch `main`. Rules for agents are in AGENTS.md. Facts in the documents below c
 
 - [AGENTS.md](AGENTS.md): hard rules for any AI agent working in this repository (never touch the live system, no credential files, commit rules, how to run tests)
 - [Holocron for agents](docs/ai/holocron-for-agents.md): the full structured reference - architecture, package map, command registry, guarantees G1 to G15 and their tests, configuration, state files, access classes, per-OS process lifetime, testing, how to extend, limits, glossary
-- [Quickstart](docs/holocron-quickstart.md): four steps from nothing to a recording NVR, Windows first, then Linux and macOS
+- [Quickstart](docs/holocron-quickstart.md): four steps from nothing to a recording NVR, each with a Linux and macOS block and a Windows PowerShell block and the expected output
 - [Cheat sheet](docs/holocron-cheatsheet.md): commands by intent, files, ports, exit codes, alert ids, the ten likeliest problems, rollback in four lines
 
 ## Operating
