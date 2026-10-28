@@ -105,13 +105,12 @@ There is no separate health panel on the Dashboard. It shows:
 - **Recent events** and **Services** (two rows: `holocron supervisor` and `holocron web`, plus the supervisor's own verdict).
 - **The full health check is in the Admin tab** (first section, see [The Admin tab](#the-admin-tab)); from a terminal it is `holocron doctor`.
 
-Buttons (admins; one action at a time, otherwise 409 "another action is still running"; 180 s limit):
+Controls (admins; one action at a time, otherwise 409 "another action is still running"; 180 s limit). The Dashboard shows one control at a time, chosen from `supervisor.running` of the last `GET /api/status`: **Stop everything** while the supervisor runs, **Start everything** while it does not, neither before the first answer or while the web app does not answer. While an action runs only the pressed button shows, with the elapsed seconds; the other control appears within one poll after it ends (`renderControls` in `app.js`). A viewer, or a view-only listener, sees no controls.
 
-| Button | What the code does (`controller.go`, `control.go`) |
+| Control | What the code does (`controller.go`, `control.go`) |
 |---|---|
-| Start everything, Start recorder | When the supervisor's control endpoint (`<root>/_state/ctl.addr`) does not answer, runs `holocron up --detach` with the web role's own global flags. When it answers: 409 "the supervisor is already running". |
-| Stop everything, Stop recorder | Both call the supervisor's stop endpoint (`POST /v1/stop`). 409 when nothing is running. |
-| Start viewers, Stop viewers | Refused with 409: the web app is part of `holocron up` and cannot start or stop itself from its own page. |
+| Start everything | When the supervisor's control endpoint (`<root>/_state/ctl.addr`) does not answer, runs `holocron up --detach` with the web role's own global flags. When it answers: 409 "the supervisor is already running". Measured 2026-10-28 on a Linux sandbox with no camera recording: 0.52 to 0.54 s through the page. |
+| Stop everything | Asks first, then calls the supervisor's stop endpoint (`POST /v1/stop`): the cameras' ffmpeg, the live view and the relay stop in that order. Under `holocron up` the host then ends the web app too, so the page loses its server (header "Server unreachable") and Holocron is started again with `holocron up`; a web app run alone with `holocron web` stays and offers Start. 409 when nothing is running. Measured: 0.01 s on the same sandbox. |
 | Record switch (per camera) | `POST /api/cameras/{name}/record` with `{"enabled": true|false}`, through the supervisor. When the supervisor is not running: 409, and the message names `holocron cam enable|disable`. |
 
 ### Settings

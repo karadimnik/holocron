@@ -20,6 +20,10 @@ A version is `MAJOR.MINOR.PATCH`, tagged `vMAJOR.MINOR.PATCH`. The public interf
 
 ## [Unreleased]
 
+### Changed
+
+- Web app: the Dashboard shows only the control that fits the state, Stop everything while Holocron runs and Start everything while it does not; the viewers buttons and the duplicate recorder buttons were removed, and the progress text says an action usually takes a few seconds.
+
 ### Fixed
 
 - Web app: Start pressed within 5 s of a Stop was refused with "the supervisor is already running"; a start or a stop now makes the next request check the supervisor again.
