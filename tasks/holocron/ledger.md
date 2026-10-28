@@ -138,3 +138,11 @@ Update this file in the same push as each merge: `git log --first-parent --merge
 | 5c8c59d | 2026-10-28 | Merge Holocron B3c: README, guides, web-app guide, rollback and agent docs rewritten for Holocron only; cutover and shadow runbooks kept as historical records |  |
 | 4b25560 | 2026-10-28 | Merge Holocron B5: doctor fix lines for tool paths and root name the file and key (config set refused them); stale web and Go texts and package READMEs no longer treat the PowerShell scripts as present; unused mockup removed |  |
 | 8070535 | 2026-10-28 | Merge Holocron B6: one winner per moved file on Linux and macOS (renameat2 RENAME_NOREPLACE, race-free link protocol, interrupted moves reported as Recovered) |  |
+| 5002a66 | 2026-10-28 | Merge Holocron R7: release process - GoReleaser build of tagged versions, attestations and SBOM, release-check CI job, changelog, runbook, tag ruleset file (D24) |  |
+
+## Releases
+
+One row per published version (tag, date, what it contains, verification done). Added by hand when a release is cut; the Merges table above is regenerated from git, this table is not.
+
+| Tag | Date | Contents | Verified |
+|---|---|---|---|
