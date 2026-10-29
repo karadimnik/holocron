@@ -20,6 +20,8 @@ A version is `MAJOR.MINOR.PATCH`, tagged `vMAJOR.MINOR.PATCH`. The public interf
 
 ## [Unreleased]
 
+## [1.1.2] - 2026-10-29
+
 ### Changed
 
 - Web app: a camera's last error on the Dashboard is put into words, with the time and whether it is handled ("At 12:03 the camera stream ended after 4 h 40 min. Restarted automatically; recording resumed." instead of "ffmpeg exited with code 0 after 16827s"), as a calm note while the camera records and an error while it does not; the original text stays in the tooltip and under Details, and a note older than 24 h moves under Details.
@@ -78,7 +80,8 @@ The first version of Holocron in its own repository: a Go network video recorder
 - Builds for Windows (first-class and live), Linux and macOS, cross-compiled and tested in CI.
 - Licence: [PolyForm Noncommercial License 1.0.0](LICENSE) (decision D22).
 
-[Unreleased]: https://github.com/karadimnik/holocron/compare/v1.1.1...HEAD
+[Unreleased]: https://github.com/karadimnik/holocron/compare/v1.1.2...HEAD
+[1.1.2]: https://github.com/karadimnik/holocron/compare/v1.1.1...v1.1.2
 [1.1.1]: https://github.com/karadimnik/holocron/compare/v1.1.0...v1.1.1
 [1.1.0]: https://github.com/karadimnik/holocron/compare/v1.0.1...v1.1.0
 [1.0.1]: https://github.com/karadimnik/holocron/compare/v1.0.0...v1.0.1
