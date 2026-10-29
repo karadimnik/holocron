@@ -1503,8 +1503,13 @@ async function loadTlsPanel() {
     el("tlsFingerprint").textContent = info.caFingerprintSha256;
     el("phoneFingerprint").textContent = info.caFingerprintSha256;
     el("tlsPanel").classList.remove("hide");
+    const remote = typeof info.remoteHost === "string" && info.remoteHost !== "";
+    el("remoteHostName").textContent = remote ? info.remoteHost : "";
+    el("remoteFingerprint").textContent = remote ? info.remoteCaFingerprintSha256 : "";
+    el("remotePhonePanel").classList.toggle("hide", !remote);
   } catch (err) {
     el("tlsPanel").classList.add("hide");
+    el("remotePhonePanel").classList.add("hide");
   }
 }
 

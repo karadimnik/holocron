@@ -212,6 +212,17 @@
           Android: Settings &gt; Security &gt; Install a certificate &gt; CA certificate. Steps and removal are in docs/ui.md.</p>
       </div>
     </div>
+    <!-- Shown only while web.remoteHost is set (api/tls/info names it); never offered to a remote peer, which gets a 404 there. -->
+    <div class="panel hide" id="remotePhonePanel" style="margin-top:16px">
+      <header><h2>Reach this PC from outside the home</h2></header>
+      <div class="form">
+        <p class="hint"><strong>Install this ONLY while on your home network; it lets this phone trust <span id="remoteHostName"></span> and nothing else.</strong>
+          It is a second certificate authority, separate from the one above, for the address you use away from home. Before you trust it, check that the device shows this fingerprint:</p>
+        <p><code id="remoteFingerprint" style="word-break:break-all"></code></p>
+        <div class="actions"><a class="btn primary" href="api/tls/ca.crt?ca=remote" download="holocron-remote-ca.crt">Download the remote certificate</a></div>
+        <p class="hint">Install it and turn it on exactly like the one above. If the remote address changes, this certificate is replaced and must be installed again. Steps are in docs/ui.md.</p>
+      </div>
+    </div>
   </section>
 
   <!-- ============== FOOTAGE ============== -->

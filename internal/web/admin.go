@@ -262,6 +262,15 @@ func tlsManager(tlsDir string) *certManager {
 // CAFor returns the CA's description, creating the CA when there is none (what -print-ca does).
 func CAFor(tlsDir string) (CAInfo, error) { return tlsManager(tlsDir).CAInfo() }
 
+// RemoteCAFor returns the remote CA's description for host (a NormalizeRemoteHost name),
+// creating it when there is none and replacing one made for another name.
+func RemoteCAFor(tlsDir, host string) (CAInfo, error) {
+	if tlsDir == "" {
+		tlsDir = defaultTLSDir()
+	}
+	return newRemoteCertManager(tlsDir, host, slog.New(slog.NewTextHandler(io.Discard, nil))).CAInfo()
+}
+
 // CACertificatePEM is the CA certificate of the folder - the one file that may leave this machine.
 // It never returns a key; a missing CA is an error wrapping os.ErrNotExist.
 func CACertificatePEM(tlsDir string) ([]byte, error) {

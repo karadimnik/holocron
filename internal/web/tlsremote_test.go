@@ -8,6 +8,7 @@ import (
 	"crypto/x509"
 	"crypto/x509/pkix"
 	"encoding/asn1"
+	"encoding/json"
 	"encoding/pem"
 	"io"
 	"log/slog"
@@ -447,5 +448,77 @@ func TestRotateCARemovesTheRemoteCA(t *testing.T) {
 	removed, left, err := RotateCA(cfg.TLSDir)
 	if err != nil || len(removed) != 8 || len(left) != 0 {
 		t.Errorf("removed %v left %v err %v", removed, left, err)
+	}
+}
+
+// Trust bootstrap: the CA files and fingerprints are served to LAN peers only. A remote peer,
+// signed in or not, gets the 404 of a route that does not exist for both CAs and the info.
+func TestCADownloadIsLANOnly(t *testing.T) {
+	rig := remoteRig(t, nil)
+	lan, _ := rig.signInFrom(t, viewerName, lanPeer, lanHost)
+	for _, c := range []struct{ query, file, name string }{{"", caCertFile, "ipcctv-local-ca.crt"}, {"?ca=remote", remoteCACertFile, "holocron-remote-ca.crt"}} {
+		rec := rig.do(tlsReq{path: "/api/tls/ca.crt" + c.query, host: lanHost, remote: lanPeer, cookie: lan})
+		want, _ := os.ReadFile(filepath.Join(rig.cfg.TLSDir, c.file))
+		if rec.Code != 200 || rec.Body.String() != string(want) || containsKeyMaterial(rec.Body.Bytes()) {
+			t.Errorf("LAN download %q: %d, same as %s: %v", c.query, rec.Code, c.file, rec.Body.String() == string(want))
+		}
+		if !strings.Contains(rec.Header().Get("Content-Disposition"), c.name) {
+			t.Errorf("LAN download %q: %q", c.query, rec.Header().Get("Content-Disposition"))
+		}
+	}
+	if rec := rig.do(tlsReq{path: "/api/tls/ca.crt?ca=other", host: lanHost, remote: lanPeer, cookie: lan}); rec.Code != 404 {
+		t.Errorf("unknown CA: %d", rec.Code)
+	}
+	var info map[string]any
+	rec := rig.do(tlsReq{path: "/api/tls/info", host: lanHost, remote: lanPeer, cookie: lan})
+	if err := json.Unmarshal(rec.Body.Bytes(), &info); err != nil {
+		t.Fatal(err)
+	}
+	remoteCA := readCertFile(t, filepath.Join(rig.cfg.TLSDir, remoteCACertFile))
+	if info["remoteHost"] != remoteName || info["remoteCaFingerprintSha256"] != fingerprint(remoteCA) || info["remoteDownload"] != "api/tls/ca.crt?ca=remote" || info["caFingerprintSha256"] == info["remoteCaFingerprintSha256"] {
+		t.Errorf("LAN info: %v", info)
+	}
+
+	remote, _ := rig.signInFrom(t, viewerName, publicPeer, remoteName)
+	for _, path := range []string{"/api/tls/ca.crt", "/api/tls/ca.crt?ca=remote", "/api/tls/info"} {
+		for _, cookie := range []string{remote, ""} {
+			rec := rig.do(tlsReq{path: path, host: remoteName, remote: publicPeer, cookie: cookie})
+			if cookie != "" && rec.Code != 404 || cookie == "" && rec.Code != 401 || strings.Contains(rec.Body.String(), "BEGIN") || strings.Contains(rec.Body.String(), "Fingerprint") {
+				t.Errorf("remote peer (signed in %v) %s: %d %q", cookie != "", path, rec.Code, rec.Body.String())
+			}
+		}
+	}
+	if !strings.Contains(rig.logs.String(), "certificate authority refused to a remote peer") {
+		t.Error("no log line for the refused remote download")
+	}
+}
+
+func TestRemoteCADownloadAbsentWhileRemoteAccessIsOff(t *testing.T) {
+	rig := newTLSRig(t, nil)
+	cookie := rig.loginAs(t, testUser, testPassword)
+	if rec := rig.do(tlsReq{path: "/api/tls/ca.crt?ca=remote", cookie: cookie}); rec.Code != 404 {
+		t.Errorf("remote CA with remote access off: %d", rec.Code)
+	}
+	rec := rig.do(tlsReq{path: "/api/tls/info", cookie: cookie})
+	if rec.Code != 200 || strings.Contains(rec.Body.String(), "remote") {
+		t.Errorf("info with remote access off: %d %s", rec.Code, rec.Body.String())
+	}
+}
+
+// The Phone tab offers the remote CA beside the LAN one, with the home-network warning, filled
+// from api/tls/info and hidden when it names no remote host.
+func TestPhoneTabOffersTheRemoteCA(t *testing.T) {
+	page, _ := staticFiles.ReadFile("static/index.html")
+	app, _ := staticFiles.ReadFile("static/app.js")
+	for _, want := range []string{`id="remotePhonePanel"`, `href="api/tls/ca.crt?ca=remote"`,
+		`Install this ONLY while on your home network; it lets this phone trust <span id="remoteHostName"></span> and nothing else.`} {
+		if !strings.Contains(string(page), want) {
+			t.Errorf("index.html lacks %s", want)
+		}
+	}
+	for _, want := range []string{`el("remoteHostName").textContent = remote ? info.remoteHost`, `el("remoteFingerprint").textContent = remote ? info.remoteCaFingerprintSha256`, `el("remotePhonePanel").classList.toggle("hide", !remote)`} {
+		if !strings.Contains(string(app), want) {
+			t.Errorf("app.js lacks %s", want)
+		}
 	}
 }

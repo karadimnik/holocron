@@ -103,3 +103,28 @@ func TestStatusRemoteLine(t *testing.T) {
 		t.Errorf("%+v", w)
 	}
 }
+
+func TestTLSCARemote(t *testing.T) {
+	r := newRig(t)
+	dir := filepath.Join(r.base(), "tls")
+	if _, errw, code := r.run("tls", "ca", "--remote", "--tls-dir", dir); code != 1 || !strings.Contains(errw, "web.remoteHost is not set") {
+		t.Errorf("remote access off: %d %q", code, errw)
+	}
+	remoteRigConfig(t, r, "remote.example.org")
+	out, errw, code := r.run("tls", "ca", "--remote", "--tls-dir", dir)
+	for _, want := range []string{"Holocron remote CA for remote.example.org", filepath.Join(dir, "ca-remote.crt"), "SHA-256:", "Install it ONLY while the phone is on your home network", "iPhone", "never offered over the public name"} {
+		if code != 0 || !strings.Contains(out, want) {
+			t.Errorf("tls ca --remote lacks %q: %d %q %q", want, code, out, errw)
+		}
+	}
+	if strings.Contains(out, "PRIVATE KEY") {
+		t.Error("printed key material")
+	}
+	if _, err := os.Stat(filepath.Join(dir, "ca.crt")); !os.IsNotExist(err) {
+		t.Errorf("tls ca --remote created the LAN CA: %v", err)
+	}
+	jout, _, _ := r.run("--json", "tls", "ca", "--remote", "--tls-dir", dir)
+	if !strings.Contains(jout, `"remoteHost"`) || !strings.Contains(jout, "remote.example.org") || !strings.Contains(jout, `"sha256"`) {
+		t.Errorf("--json: %s", jout)
+	}
+}

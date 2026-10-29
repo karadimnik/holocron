@@ -194,12 +194,16 @@ func tlsDir(e *env, flagDir string) string {
 
 func cmdTLSCA(ctx context.Context, e *env) error {
 	fs, dir := tlsFlags(e, "tls ca")
+	remote := fs.Bool("remote", false, "the remote CA of web.remoteHost instead of the LAN CA")
 	pos, err := parseFlags(fs, e.args)
 	if err != nil {
 		return err
 	}
 	if err := wantArgs("tls ca", pos, 0, 0); err != nil {
 		return err
+	}
+	if *remote {
+		return tlsRemoteCA(e, tlsDir(e, *dir))
 	}
 	info, err := web.CAFor(tlsDir(e, *dir))
 	if err != nil {
@@ -209,6 +213,24 @@ func cmdTLSCA(ctx context.Context, e *env) error {
 		return printJSON(e.out, map[string]any{"file": info.Path, "name": info.Subject, "notAfter": info.NotAfter, "sha256": info.Fingerprint})
 	}
 	web.WriteCAInstructions(e.out, info)
+	return nil
+}
+
+// tlsRemoteCA is `tls ca --remote`: the remote CA for web.remoteHost, created when absent and
+// replaced when it was made for another name.
+func tlsRemoteCA(e *env, dir string) error {
+	host := e.cfg.Web.RemoteHost
+	if host == "" {
+		return failed("web.remoteHost is not set: remote access is off, so there is no remote CA (see docs/ui.md, section \"Reaching Holocron from outside the home network\")")
+	}
+	info, err := web.RemoteCAFor(dir, host)
+	if err != nil {
+		return failed("cannot prepare the remote CA: %v", err)
+	}
+	if e.json {
+		return printJSON(e.out, map[string]any{"file": info.Path, "name": info.Subject, "notAfter": info.NotAfter, "sha256": info.Fingerprint, "remoteHost": host})
+	}
+	web.WriteRemoteCAInstructions(e.out, info, host)
 	return nil
 }
 
