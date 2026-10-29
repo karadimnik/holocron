@@ -17,6 +17,7 @@ import (
 func webBase(e *env) web.Config {
 	return web.Config{
 		Listen: e.cfg.Web.Listen, TLSListen: e.cfg.Web.TLSListen, TLSDir: e.cfg.Web.TLSDir, AuthDir: e.cfg.Web.AuthDir,
+		RemoteHost:  e.cfg.Web.RemoteHost,
 		ArchiveRoot: e.paths.Root, CamerasPath: e.paths.Cameras, ConfigPath: e.paths.Config,
 		LiveSecretDir: e.opts.Platform.Dirs().Auth,
 	}
@@ -24,7 +25,7 @@ func webBase(e *env) web.Config {
 
 // cmdWeb is the web role: `holocron up` starts it as the host's managed child, and it can be run
 // by hand for diagnostics. It takes every camui flag and config-file key; the defaults come from
-// holocron.config.json (web.listen, web.tlsListen, web.tlsDir, web.authDir, RootPath), the flags
+// holocron.config.json (web.listen, web.tlsListen, web.tlsDir, web.authDir, web.remoteHost, RootPath), the flags
 // and the camui config file override them.
 func cmdWeb(ctx context.Context, e *env) error {
 	out := e.errw

@@ -66,6 +66,7 @@ Types are strict: a JSON string is never accepted for a boolean or a number (Pow
 | web.enabled | true | JSON boolean | NEW: `holocron up` starts the web role (false: recorder only) | yes |
 | web.listen | `127.0.0.1:8787` | host:port, port 1-65535; the web app's loopback guard decides at start (a non-loopback address needs CAMUI_TOKEN of 16+ characters) | NEW: the web app's listener | no |
 | web.tlsListen | `` | empty (off) or IPv4:port, port 1-65535; the web app requires a private address and at least one user | NEW: the LAN HTTPS listener (login) | no |
+| web.remoteHost | `` | empty (off) or one DNS name such as `remote.example.org` (LDH labels, at least two, at most 253 characters, lower-cased, a trailing dot dropped; no IP, port, scheme, path, wildcard or space); needs web.tlsListen | NEW: remote access (viewer-only) through the HTTPS listener | no |
 | web.tlsDir, web.authDir | `` | strings; empty = the web app's default folders under `%LOCALAPPDATA%\IPCCTV` (never inside the repository) | NEW: local CA and certificate; users.json, sessions.json | no |
 
 Editable = the allow-list of `holocron config set|unset` (rule R1); the other keys are changed by hand or by the install.

@@ -144,6 +144,42 @@ func TestWebSection(t *testing.T) {
 	}
 }
 
+func TestWebRemoteHost(t *testing.T) {
+	for in, want := range map[string]string{
+		"remote.example.org": "remote.example.org", "Remote.Example.ORG.": "remote.example.org",
+		"a-b.c1.example.org": "a-b.c1.example.org", "": "",
+	} {
+		c, _, err := Parse([]byte(`{"web":{"tlsListen":"192.168.1.50:8443","remoteHost":"`+in+`"}}`), linP)
+		if err != nil || c.Web.RemoteHost != want {
+			t.Errorf("%q: %q %v", in, c.Web.RemoteHost, err)
+		}
+	}
+	long := strings.Repeat("a", 63) + "." + strings.Repeat("b", 63) + "." + strings.Repeat("c", 63) + "." + strings.Repeat("d", 61) + ".org"
+	for _, bad := range []struct{ in, text string }{
+		{"203.0.113.7", "IP address"}, {"192.168.1.50", "IP address"},
+		{"remote.example.org:8443", "port"}, {"[2001:db8::1]", "port"}, {"2001:db8::1", "port"},
+		{"https://remote.example.org", "scheme"}, {"remote.example.org/x", "path"},
+		{"*.example.org", "wildcard"}, {"remote example.org", "space"}, {" remote.example.org", "space"},
+		{"localhost", "two labels"}, {"camera", "two labels"}, {".", "1 to 253"}, {"a..b", "label"},
+		{"-a.example.org", "label"}, {"a_b.example.org", "label"}, {"a.123", "all digits"},
+		{strings.Repeat("a", 64) + ".org", "label"}, {long, "1 to 253"},
+	} {
+		_, _, err := Parse([]byte(`{"web":{"tlsListen":"192.168.1.50:8443","remoteHost":"`+bad.in+`"}}`), linP)
+		var ve *ValidationError
+		if !errors.As(err, &ve) || ve.Problems[0].Path != "web.remoteHost" || !strings.Contains(ve.Problems[0].Message, bad.text) {
+			t.Errorf("%q: %v", bad.in, err)
+		}
+	}
+	_, _, err := Parse([]byte(`{"web":{"remoteHost":"remote.example.org"}}`), linP)
+	var ve *ValidationError
+	if !errors.As(err, &ve) || ve.Problems[0].Path != "web.remoteHost" || !strings.Contains(ve.Problems[0].Message, "needs web.tlsListen") {
+		t.Errorf("without tlsListen: %v", err)
+	}
+	if _, _, err := Parse([]byte(`{"web":{"remoteHost":7}}`), linP); err == nil {
+		t.Error("a number was accepted")
+	}
+}
+
 func TestSecretsFilePaths(t *testing.T) {
 	c, _, err := Parse([]byte(`{"secrets":{"file":" /x/s.enc ","keyFile":"/x/s.key"}}`), linP)
 	if err != nil || c.Secrets.File != "/x/s.enc" || c.Secrets.KeyFile != "/x/s.key" || c.Secrets.Backend != "auto" {
