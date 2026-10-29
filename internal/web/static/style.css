@@ -90,7 +90,7 @@ tr:hover td{background:#1e1e1c}
 .cam-name{font-weight:500}
 .cam-meta{color:var(--ink-3);font-size:12px;margin-top:2px}
 .num{font-variant-numeric:tabular-nums;color:var(--ink-2)}
-.err{color:#f09a9a;font-size:12px;font-family:var(--mono);max-width:34ch;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.err{color:#f09a9a;font-size:12px;font-family:var(--mono);overflow-wrap:break-word}
 /* camera note (cameraNote): the last error in words, an icon AND words; calm while the camera records */
 .cnote{display:flex;align-items:flex-start;gap:6px;margin-top:3px;max-width:52ch;color:var(--ink-3);font-size:12px;line-height:1.4;white-space:normal}
 .cnote svg{flex:none;margin-top:1px}
@@ -115,7 +115,7 @@ tr:hover td{background:#1e1e1c}
 .crow:last-child{border-bottom:0}
 .crow .main{flex:1;min-width:0}
 .crow .nm{font-weight:500}
-.crow .sb{color:var(--ink-3);font-size:12px;margin-top:2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.crow .sb{color:var(--ink-3);font-size:12px;margin-top:2px;overflow-wrap:break-word}
 .crow .cnote-row{flex:1 1 100%;min-width:0}
 
 /* layout A above the phone breakpoint, layout C below it */
@@ -477,6 +477,8 @@ body.authpage{display:grid;place-items:center;min-height:100vh;padding:18px}
 }
 
 /* ---- Admin > System: the Danger zone, set apart from routine use ---- */
+/* the form's grid gap spaces a description from its heading; a paragraph's own margin doubled it */
+#aSystemPanel .form>p{margin:0}
 .dzone{margin-top:14px;border:1px solid #8a3a3a;border-radius:var(--r);padding:12px var(--pad)}
 .dzone h3{color:#f09a9a}
 .dzrow{display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-top:8px}

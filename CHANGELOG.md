@@ -24,6 +24,10 @@ A version is `MAJOR.MINOR.PATCH`, tagged `vMAJOR.MINOR.PATCH`. The public interf
 
 - The iPhone certificate steps (Phone tab, Admin tab, `holocron tls ca`) say they have not been tested with Holocron; the README, `docs/ui.md` and `docs/limitations.md` list the clients that were tested (a Windows PC and an Android phone, including live video over the internet) and state that iPhone and iPad are not.
 
+### Fixed
+
+- Web app: a down camera's "No footage since ..." line in the camera table, and the line under a camera's name in the phone's compact rows, were cut off with an ellipsis; they now show in full and wrap on narrow screens. Admin > System no longer shows a blank gap between the Reload configuration heading and its description, and the pages use a plain hyphen where they showed an em dash (the empty table cells and the Footage note).
+
 ## [1.3.1] - 2026-10-29
 
 ### Fixed
