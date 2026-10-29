@@ -153,6 +153,7 @@ Update this file in the same push as each merge: `git log --first-parent --merge
 | 2dc4111 | 2026-10-29 | Merge Holocron B10: sign-in trims white space around the user name (a phone keyboard added a trailing space), in the lookup, lockout key and auth.log; passwords untouched |  |
 | d8a93d8 | 2026-10-29 | Merge Holocron R17: the iPhone certificate steps are labelled not tested with Holocron; docs list the tested clients (Windows PC, Android incl. live video over the internet) and state iPhone and iPad are untested |  |
 | 6564924 | 2026-10-29 | Merge Holocron R16: six screenshots (desktop and phone) in the README, rendered from the real UI against a fake-data sandbox (fake cameras, synthetic test-pattern footage, metadata stripped) |  |
+| 3b3ad89 | 2026-10-29 | Merge Holocron R18: the No footage line shows in full, no blank gap in Admin > System, no em dashes in the pages (plus a test), wrapped meta lines on the phone; README screenshots re-rendered |  |
 
 ## Releases
 

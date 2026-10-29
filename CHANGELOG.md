@@ -20,6 +20,8 @@ A version is `MAJOR.MINOR.PATCH`, tagged `vMAJOR.MINOR.PATCH`. The public interf
 
 ## [Unreleased]
 
+## [1.3.2] - 2026-10-29
+
 ### Changed
 
 - The iPhone certificate steps (Phone tab, Admin tab, `holocron tls ca`) say they have not been tested with Holocron; the README, `docs/ui.md` and `docs/limitations.md` list the clients that were tested (a Windows PC and an Android phone, including live video over the internet) and state that iPhone and iPad are not.
@@ -104,7 +106,8 @@ The first version of Holocron in its own repository: a Go network video recorder
 - Builds for Windows (first-class and live), Linux and macOS, cross-compiled and tested in CI.
 - Licence: [PolyForm Noncommercial License 1.0.0](LICENSE) (decision D22).
 
-[Unreleased]: https://github.com/karadimnik/holocron/compare/v1.3.1...HEAD
+[Unreleased]: https://github.com/karadimnik/holocron/compare/v1.3.2...HEAD
+[1.3.2]: https://github.com/karadimnik/holocron/compare/v1.3.1...v1.3.2
 [1.3.1]: https://github.com/karadimnik/holocron/compare/v1.3.0...v1.3.1
 [1.3.0]: https://github.com/karadimnik/holocron/compare/v1.1.2...v1.3.0
 [1.1.2]: https://github.com/karadimnik/holocron/compare/v1.1.1...v1.1.2
