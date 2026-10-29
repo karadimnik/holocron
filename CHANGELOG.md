@@ -20,6 +20,8 @@ A version is `MAJOR.MINOR.PATCH`, tagged `vMAJOR.MINOR.PATCH`. The public interf
 
 ## [Unreleased]
 
+## [1.3.1] - 2026-10-29
+
 ### Fixed
 
 - Web app: signing in from a phone failed with "Invalid username or password" when the keyboard appended a space after the suggested user name; white space around a user name sent by the sign-in, setup or Admin form is now ignored (in the lookup, the per-name lockout and `auth.log`), the password is still taken exactly as typed ([docs/ui.md](docs/ui.md#first-run-the-setup-page-and-signing-in)).
@@ -94,7 +96,8 @@ The first version of Holocron in its own repository: a Go network video recorder
 - Builds for Windows (first-class and live), Linux and macOS, cross-compiled and tested in CI.
 - Licence: [PolyForm Noncommercial License 1.0.0](LICENSE) (decision D22).
 
-[Unreleased]: https://github.com/karadimnik/holocron/compare/v1.3.0...HEAD
+[Unreleased]: https://github.com/karadimnik/holocron/compare/v1.3.1...HEAD
+[1.3.1]: https://github.com/karadimnik/holocron/compare/v1.3.0...v1.3.1
 [1.3.0]: https://github.com/karadimnik/holocron/compare/v1.1.2...v1.3.0
 [1.1.2]: https://github.com/karadimnik/holocron/compare/v1.1.1...v1.1.2
 [1.1.1]: https://github.com/karadimnik/holocron/compare/v1.1.0...v1.1.1
