@@ -9,11 +9,13 @@
 package web
 
 import (
+	"bytes"
 	"context"
 	"embed"
 	"errors"
 	"flag"
 	"fmt"
+	"html"
 	"io"
 	"io/fs"
 	"log/slog"
@@ -178,7 +180,11 @@ func buildMux(cfg Config, log *slog.Logger, opts ...serveOpt) (*http.ServeMux, e
 	api := NewAPI(cfg, log)
 	newServeEnv(opts).apply(api)
 	api.Routes(mux)
-	files := versioned(hideAuthPages(http.FileServerFS(static)))
+	page, err := stampedIndex(static)
+	if err != nil {
+		return nil, err
+	}
+	files := versioned(hideAuthPages(withIndex(page, http.FileServerFS(static))))
 	mux.Handle("GET /", files)
 	// The same files under their own patterns, so each has its own access class (access.go): the
 	// sign-in page needs the style sheet, and the Admin tab's code is served to admins only.
@@ -344,6 +350,35 @@ func versioned(next http.Handler) http.Handler {
 		w.Header().Set("ETag", etag)
 		w.Header().Set("Cache-Control", "no-cache")
 		next.ServeHTTP(w, r)
+	})
+}
+
+// versionMeta is the placeholder in index.html that stampedIndex fills with the build version: the
+// page keeps the version it was served with and app.js compares it with GET /api/status's
+// app.version, so an open page learns that Holocron was upgraded under it. The sign-in and
+// first-user pages are other files and carry no version.
+const versionMeta = `<meta name="holocron-version" content="">`
+
+func stampedIndex(static fs.FS) ([]byte, error) {
+	page, err := fs.ReadFile(static, "index.html")
+	if err != nil {
+		return nil, fmt.Errorf("embedded UI: %w", err)
+	}
+	stamped := `<meta name="holocron-version" content="` + html.EscapeString(version) + `">`
+	if !bytes.Contains(page, []byte(versionMeta)) {
+		return nil, fmt.Errorf("embedded UI: index.html lacks %s", versionMeta)
+	}
+	return bytes.Replace(page, []byte(versionMeta), []byte(stamped), 1), nil
+}
+
+// withIndex serves the stamped index.html for the page itself ("/"); everything else is next's.
+func withIndex(page []byte, next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/" {
+			next.ServeHTTP(w, r)
+			return
+		}
+		http.ServeContent(w, r, "index.html", time.Time{}, bytes.NewReader(page))
 	})
 }
 

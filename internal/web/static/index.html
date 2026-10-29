@@ -4,6 +4,8 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="color-scheme" content="dark">
+<!-- Filled with the build version when the server serves this page (stampedIndex in main.go). -->
+<meta name="holocron-version" content="">
 <title>Holocron</title>
 <link rel="stylesheet" href="style.css">
 </head>
@@ -30,6 +32,13 @@
       <button class="btn hide" id="signOut" type="button">Sign out</button>
     </div>
   </header>
+
+  <!-- Filled when GET /api/status reports another version than the one this page was served with
+       (checkVersion in app.js): Holocron was upgraded under this open page. -->
+  <div class="update-notice" id="updateNotice">
+    <p id="updateText" role="status" aria-live="polite"></p>
+    <button class="btn primary" id="updateReload" type="button" hidden>Reload</button>
+  </div>
 
   <!-- Shown only on the HTTPS LAN listener in view-only mode (see detectViewOnly in app.js). -->
   <div id="viewOnly" class="viewonly-note hide"><strong>This address is view-only.</strong> You can watch the cameras and browse footage, but not start, stop or change anything. Use the PC itself for that.</div>
@@ -280,6 +289,9 @@
       </dialog>
     </div>
   </section>
+
+  <!-- Under every tab: the version this page was served with (app.js). -->
+  <footer class="appver" id="appVersion"></footer>
   </main>
 </div>
 
