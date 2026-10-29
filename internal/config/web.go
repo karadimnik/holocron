@@ -1,6 +1,7 @@
 package config
 
 import (
+	"errors"
 	"net"
 	"strconv"
 	"strings"
@@ -16,6 +17,9 @@ type Web struct {
 	TLSListen string `json:"tlsListen"` // private IPv4:port of the LAN HTTPS listener; "" = off
 	TLSDir    string `json:"tlsDir"`    // local CA and server certificate; "" = the web app's default folder
 	AuthDir   string `json:"authDir"`   // users.json, sessions.json, auth.log; "" = the web app's default folder
+	// RemoteHost is the public DNS name the HTTPS listener also answers to (remote access,
+	// viewer-only); "" = off. Normalised by NormalizeRemoteHost; needs TLSListen.
+	RemoteHost string `json:"remoteHost,omitempty"`
 }
 
 func defaultWeb() Web { return Web{Enabled: true, Listen: DefaultWebListen} }
@@ -65,8 +69,84 @@ func (d *decoder) web(c *Config) {
 			d.subStr(p, v, &w.TLSDir)
 		case "authdir":
 			d.subStr(p, v, &w.AuthDir)
+		case "remotehost":
+			var s string
+			d.subStr(p, v, &s)
+			if d.lastProblemOn(p) {
+				continue
+			}
+			host, err := NormalizeRemoteHost(s)
+			if err != nil {
+				d.problem(p, "%v", err)
+				continue
+			}
+			w.RemoteHost = host
 		default:
 			d.warn(p, "unknown key, ignored")
 		}
 	}
+	if w.RemoteHost != "" && w.TLSListen == "" && !d.hasProblemUnder("web.tlsListen") {
+		d.problem("web.remoteHost", "needs web.tlsListen: remote access is served only by the HTTPS login listener")
+	}
+}
+
+// NormalizeRemoteHost validates web.remoteHost: empty (off) or one DNS host name of LDH labels,
+// at most 253 characters, at least two labels and a top-level label that is not all digits. It
+// returns the name in lower case without a trailing dot. IP literals, ports, schemes, paths,
+// wildcards and spaces are refused: the name goes into the server certificate and the Host
+// allowlist, so it must be exactly one name.
+func NormalizeRemoteHost(s string) (string, error) {
+	if s == "" {
+		return "", nil
+	}
+	bad := func(why string) error {
+		return errors.New("must be empty (off) or one DNS name such as remote.example.org: " + why)
+	}
+	if strings.ContainsAny(s, " \t\r\n") {
+		return "", bad("it contains a space")
+	}
+	if strings.Contains(s, "://") {
+		return "", bad("no scheme")
+	}
+	if strings.ContainsAny(s, "/?#") {
+		return "", bad("no path")
+	}
+	if strings.Contains(s, "*") {
+		return "", bad("no wildcard")
+	}
+	if strings.ContainsAny(s, ":[]") {
+		return "", bad("no port and no IPv6 address")
+	}
+	h := strings.TrimSuffix(strings.ToLower(s), ".")
+	if net.ParseIP(h) != nil {
+		return "", bad("an IP address is not a name")
+	}
+	if h == "" || len(h) > 253 {
+		return "", bad("a name is 1 to 253 characters")
+	}
+	labels := strings.Split(h, ".")
+	if len(labels) < 2 {
+		return "", bad("a public name has at least two labels")
+	}
+	for _, l := range labels {
+		if !ldhLabel(l) {
+			return "", bad("each label is 1 to 63 letters, digits or inner hyphens")
+		}
+	}
+	if strings.Trim(labels[len(labels)-1], "0123456789") == "" {
+		return "", bad("the last label must not be all digits")
+	}
+	return h, nil
+}
+
+func ldhLabel(l string) bool {
+	if len(l) < 1 || len(l) > 63 || l[0] == '-' || l[len(l)-1] == '-' {
+		return false
+	}
+	for _, c := range l {
+		if !(c >= 'a' && c <= 'z' || c >= '0' && c <= '9' || c == '-') {
+			return false
+		}
+	}
+	return true
 }

@@ -68,6 +68,12 @@ type Config struct {
 	// address, 127.0.0.1 and localhost are always covered.
 	TLSHosts []string `json:"tlsHosts"`
 
+	// RemoteHost is the public DNS name of remote access (remote.go): the HTTPS listener's
+	// certificate and Host allowlist add it, and a request from a public peer address is capped
+	// to a viewer. Empty is off. Only web.remoteHost in holocron.config.json sets it (validated
+	// there by config.NormalizeRemoteHost); not the camui config file, not a flag.
+	RemoteHost string `json:"-"`
+
 	// TLSDir holds the local CA and the server certificate with their keys.
 	// Default %LOCALAPPDATA%\IPCCTV\tls. Never inside the repository.
 	TLSDir string `json:"tlsDir"`

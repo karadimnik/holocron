@@ -36,16 +36,19 @@ const (
 // authService is the LAN listener's sign-in: users, sessions, throttling and the
 // handlers and middleware around them.
 type authService struct {
-	dir      string
-	users    UserStore
-	sessions *sessionStore
-	limiter  *ipLimiter
-	lock     *lockout
-	hasher   passwordHasher
-	authLog  *authLog
-	log      *slog.Logger
-	now      func() time.Time
-	runner   *cli.Runner // the mutating routes run as Actions; nil: over log
+	dir           string
+	users         UserStore
+	sessions      *sessionStore
+	limiter       *ipLimiter
+	remoteLimiter *ipLimiter // the stricter bucket of remote peers (remote.go)
+	lock          *lockout
+	hasher        passwordHasher
+	authLog       *authLog
+	log           *slog.Logger
+	now           func() time.Time
+	runner        *cli.Runner // the mutating routes run as Actions; nil: over log
+
+	remoteHost string // web.remoteHost; "" = remote access off (remote.go)
 
 	hashSlots chan struct{}
 	dummyOnce sync.Once
@@ -54,16 +57,17 @@ type authService struct {
 
 func newAuthService(dir string, users UserStore, log *slog.Logger, now func() time.Time, hasher passwordHasher) *authService {
 	return &authService{
-		dir:       dir,
-		users:     users,
-		sessions:  newSessionStore(dir, now),
-		limiter:   newIPLimiter(loginRatePerMinute, loginBurst, maxIPEntries, now),
-		lock:      newLockout(users, now),
-		hasher:    hasher,
-		authLog:   newAuthLog(dir, now),
-		log:       log,
-		now:       now,
-		hashSlots: make(chan struct{}, maxConcurrentHashes),
+		dir:           dir,
+		users:         users,
+		sessions:      newSessionStore(dir, now),
+		limiter:       newIPLimiter(loginRatePerMinute, loginBurst, maxIPEntries, now),
+		remoteLimiter: newIPLimiter(remoteLoginRatePerMinute, remoteLoginBurst, maxIPEntries, now),
+		lock:          newLockout(users, now),
+		hasher:        hasher,
+		authLog:       newAuthLog(dir, now),
+		log:           log,
+		now:           now,
+		hashSlots:     make(chan struct{}, maxConcurrentHashes),
 	}
 }
 
@@ -111,7 +115,11 @@ func (a *authService) audit(r *http.Request, started time.Time, actor, target, e
 	if err := a.authLog.record(ip, target, event, result); err != nil {
 		emit(a.log, slog.LevelError, "auth.audit_write", actor, target, "fail", started, "error", err.Error())
 	}
-	emit(a.log, resultLevel(result), authActions[event], actor, target, result, started, "from", ip)
+	extra := []any{"from", ip}
+	if a.remote(r) {
+		extra = append(extra, "peer", "remote")
+	}
+	emit(a.log, resultLevel(result), authActions[event], actor, target, result, started, extra...)
 }
 
 // storeFailed reports a store failure at ERROR.
@@ -122,12 +130,17 @@ func (a *authService) storeFailed(action, target string, started time.Time, err 
 type ctxKey struct{}
 
 // signedIn is the user behind a valid session cookie.
-func (a *authService) signedIn(r *http.Request) (User, bool) {
+// A remote request's session is held to the remote limits.
+func (a *authService) signedIn(r *http.Request, remote bool) (User, bool) {
 	c, err := r.Cookie(sessionCookie)
 	if err != nil {
 		return User{}, false
 	}
-	sess, ok := a.sessions.Lookup(c.Value)
+	lim := lanSession
+	if remote {
+		lim = remoteSession
+	}
+	sess, ok := a.sessions.lookupWithin(c.Value, lim)
 	if !ok {
 		return User{}, false
 	}
@@ -145,7 +158,19 @@ func (a *authService) signedIn(r *http.Request) (User, bool) {
 // audit record. The class is the one of the pattern mux will run for the request.
 func (a *authService) gate(mux *http.ServeMux, next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		user, ok := a.signedIn(r)
+		remote := a.remote(r)
+		if remote && hostName(r.Host) != a.remoteHost {
+			denied(a.log, r, User{}, "", "remote peer naming another host")
+			writeAPIError(w, http.StatusForbidden, "forbidden: host not allowed")
+			return
+		}
+		if remote {
+			remoteHeaders(w, r)
+		}
+		user, ok := a.signedIn(r, remote)
+		if ok && remote {
+			user.Role = roleViewer // the remote cap: a viewer whatever the account's role
+		}
 		if ok {
 			r = r.WithContext(context.WithValue(r.Context(), ctxKey{}, user))
 		}
@@ -170,9 +195,17 @@ func (a *authService) gate(mux *http.ServeMux, next http.Handler) http.Handler {
 			denied(a.log, r, user, pattern, "unclassified route")
 			writeAPIError(w, http.StatusForbidden, "forbidden")
 			return
+		case class == accessAdmin && remote:
+			denied(a.log, r, user, pattern, "remote access is viewer-only")
+			writeAPIError(w, http.StatusForbidden, adminOnlyMessage)
+			return
 		case class == accessAdmin && !isAdmin(user):
 			denied(a.log, r, user, pattern, "admins only")
 			writeAPIError(w, http.StatusForbidden, adminOnlyMessage)
+			return
+		case remote && !readOnlyAllowed(r.Method, r.URL.Path):
+			denied(a.log, r, user, pattern, "remote access is view-only")
+			writeAPIError(w, http.StatusForbidden, readOnlyMessage)
 			return
 		}
 		next.ServeHTTP(w, r)
@@ -321,6 +354,14 @@ func (a *authService) handleLogin(w http.ResponseWriter, r *http.Request) {
 		tooManyAttempts(w, wait)
 		return
 	}
+	if a.remote(r) {
+		ok, wait := a.remoteLimiter.allow(remotePeerKey(sourceIP(r)))
+		if !ok {
+			a.audit(r, started, "anonymous", name, "login", "throttled")
+			tooManyAttempts(w, wait)
+			return
+		}
+	}
 	if a.consumeUnlock(name) {
 		a.lock.reset(name)
 		a.audit(r, started, "local", name, "unlock", "applied")
@@ -368,15 +409,23 @@ func (a *authService) handleLogin(w http.ResponseWriter, r *http.Request) {
 	if old, err := r.Cookie(sessionCookie); err == nil {
 		_ = a.sessions.Delete(old.Value) // a new login never inherits an earlier session
 	}
-	token, err := a.sessions.Create(user.ID)
+	remote, lim := a.remote(r), lanSession
+	if remote {
+		lim = remoteSession
+	}
+	token, err := a.sessions.createWithin(user.ID, lim)
 	if err != nil {
 		a.storeFailed("auth.login", user.Username, started, err)
 		writeAPIError(w, http.StatusInternalServerError, "sign-in is unavailable")
 		return
 	}
 	a.audit(r, started, "anonymous", user.Username, "login", "ok")
-	a.setSessionCookie(w, token, int(sessionLifetime.Seconds()))
-	writeJSON(w, http.StatusOK, map[string]any{"ok": true, "username": user.Username, "role": effectiveRole(user.Role), "next": safeNext(req.Next)})
+	a.setSessionCookie(w, token, int(lim.lifetime.Seconds()))
+	role := effectiveRole(user.Role)
+	if remote {
+		role = roleViewer
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"ok": true, "username": user.Username, "role": role, "next": safeNext(req.Next)})
 }
 
 func (a *authService) dummyHash() string {

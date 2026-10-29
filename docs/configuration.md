@@ -128,6 +128,7 @@ These four groups are objects in `holocron.config.json`; their sub-keys are came
 | `web.enabled` | `true` | `holocron up` starts the web app (false: recorder only). |
 | `web.listen` | `127.0.0.1:8787` | The web app's loopback listener. A non-loopback address needs `CAMUI_TOKEN` of 16 or more characters. |
 | `web.tlsListen` | `""` | Empty (off) or `IPv4:port`: the LAN HTTPS listener with login. The web app requires a private address and at least one user. |
+| `web.remoteHost` | `""` | Empty (off) or one public DNS name such as `remote.example.org`: the HTTPS listener also answers to it, and requests from public addresses are viewer-only. Needs `web.tlsListen`. [Reaching Holocron from outside the home network](ui.md#reaching-holocron-from-outside-the-home-network). |
 | `web.tlsDir`, `web.authDir` | `""` | Folders of the local CA and certificate, and of `users.json` and `sessions.json`; empty means the web app's default folders (never inside the repository). |
 
 ## The camera list

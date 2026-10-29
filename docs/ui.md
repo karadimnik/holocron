@@ -261,6 +261,39 @@ The video needs the media settings and UDP rule from [Live view on the LAN](#liv
 
 **Threat note.** The sign-in and HTTPS keep other devices out and the traffic private on the LAN. With the view-only default, a lost phone or a guessed password can watch but cannot stop recording or reconfigure anything; with `tlsReadOnly` off, a signed-in admin has full control. Anyone who can read `web.tlsDir` can read the private keys; anyone who can read `web.authDir` can read the password hashes. Both folders are restricted to the owner; do not copy them. Exposing the web app to the internet is out of scope: the project plan puts a private overlay (WireGuard or Tailscale) before any such step (`tasks/holocron/todo.md`, P50). See [limitations.md](limitations.md).
 
+## Reaching Holocron from outside the home network
+
+Off by default. Setting `web.remoteHost` in `holocron.config.json` to the public DNS name of the home connection (a dynamic-DNS name such as `remote.example.org`; it follows a changing home IP, Holocron never looks the name up) lets the HTTPS login listener answer to that name too, for a phone on mobile data. Remote access is **viewer-only**: it watches, it never changes anything. It needs `web.tlsListen`; `holocron config validate` and `holocron doctor` say so when it is missing.
+
+**Threat model in plain words.** Forwarding a router port exposes a sign-in page to the whole internet: anyone can reach it and try passwords. What protects the house is a strong password, the sign-in throttling below, and the cap that makes every remote session a viewer, so a guessed password or a stolen phone can watch the cameras but cannot stop recording, change settings, manage users or read the camera login. The loopback page (`127.0.0.1:8787`) has no login and treats every caller as an admin: it is never part of remote access, nothing forwards to it, and its port must never be forwarded.
+
+**Who counts as remote.** A request is remote when its TCP peer address, the address the connection actually came from, is public: not loopback, not private (`10/8`, `172.16/12`, `192.168/16`, IPv6 `fc00::/7`), not link-local, not carrier-grade NAT (`100.64.0.0/10`). No header decides it: `X-Forwarded-For`, `Forwarded` and the like are ignored, and the Host header (which a caller writes freely) cannot make a remote request local. A router port-forward keeps the caller's public source address, so a phone on 5G is remote. A device at home that uses the public name through the router's hairpin NAT arrives from a private address and keeps LAN behaviour. Behind a reverse proxy or tunnel every request would arrive from the proxy's address: that setup is not supported.
+
+**What a remote request gets** (all in `internal/web/remote.go` and the session gate):
+
+- Its Host must be `web.remoteHost` (any case, any port); a public peer naming the LAN address or anything else gets 403.
+- Its effective role is **viewer** whatever the account: admin routes answer 403, the Admin and Settings tabs do not appear, and the view-only allow-list applies even with `-tls-readonly false`. It sees Dashboard, Live, Footage and Phone like a viewer on the LAN; live video does not play from outside (below).
+- Sign-in: the LAN limits stay (10 attempts a minute per address with 5 banked, and the per-name lockout of [Signing in on the LAN](#signing-in-on-the-lan-users-sessions-and-brute-force-protection)), plus a stricter remote bucket of **2 attempts a minute per address, 3 banked**; an IPv6 `/64` counts as one address. Three quick tries cover a mistyped password; after that one address gets one guess every 30 seconds.
+- Sessions from outside end after **12 hours without use or 7 days** after sign-in, whichever comes first (LAN: 7 days idle, 30 days). A LAN session that a phone carries outside is held to the same remote limits.
+- Answers carry `Strict-Transport-Security: max-age=86400` (no `includeSubDomains`, no `preload`), `Referrer-Policy: no-referrer`, `X-Content-Type-Options: nosniff` and, on the API, `Cache-Control: no-store`. The cookie is `Secure`, `HttpOnly`, `SameSite=Strict`.
+- Every sign-in attempt is recorded in `auth.log` with the peer address and the result (never a password or a token), and every refusal by the remote cap is an `access.denied` audit record with the peer address. The web role logs `remote access on for <name>, viewer-only` when it starts.
+
+**The certificate: not solved in this release.** The local CA is name-constrained to private addresses and names, so it cannot vouch for a public name, and adding one to the server certificate would make every browser that enforces name constraints (Go, Chrome 112 and later) reject the certificate for the LAN address too. The server certificate therefore does not name `web.remoteHost`, and a phone outside the home sees a certificate name warning. Do not accept that warning on a network you do not trust: it is exactly what an interception would look like. `holocron doctor` reports it as a warning until a trusted certificate for the public name exists (a decision still open).
+
+**Live video is not part of this release.** It needs a separate media port for WebRTC and comes in a later task; remotely the Live tab does not play.
+
+**Setting it up.**
+
+1. Get a dynamic-DNS name for the home connection (the router or the DDNS provider's client keeps it pointed at the changing IP).
+2. Create a dedicated viewer account with a long password: `holocron user add NAME --role viewer` (the password is read from standard input). An admin signing in from outside is capped to viewer anyway; without any viewer account `holocron doctor` warns.
+3. Set `web.tlsListen` (for example `192.168.1.50:8443`) and `web.remoteHost` (for example `remote.example.org`) in `holocron.config.json`, then `holocron config validate` and `holocron restart --detach`.
+4. On the router, forward **one** TCP port of your choice (for example WAN 48443) to the `web.tlsListen` address and port. Do **not** forward 8787 (the loopback page) or any media port.
+5. `holocron status` shows `remote access: on (viewer-only) for remote.example.org`; `holocron doctor --group web` lists the policy, the accounts, the certificate warning and, when 20 or more remote sign-ins failed or were locked in 24 hours, the counts and the top three addresses.
+
+To switch it off, remove `web.remoteHost`, restart, and delete the router's port-forward.
+
+**The alternative: a VPN.** A VPN into the home network (WireGuard on the router, or a mesh VPN such as Tailscale) exposes no sign-in page to the internet at all: the phone joins the LAN and uses the normal LAN address, the CA it already trusts, and live video works as at home. It is the safer choice when the router or the phone supports it; remote access is for when it does not.
+
 ## The Admin tab
 
 Admins only; its markup and code are in `admin.js`, which only an admin receives (`GET /admin.js` is an admin route; the page everyone gets holds an empty placeholder). Not shown on a view-only HTTPS listener. Each section calls the same helper as the matching `holocron` command, as a `web.admin.*` action; changes and the reads that matter for security (user list, CA, camera-login status, autostart status) go to the audit stream. Passwords and the camera login are typed into password fields, sent once in a POST body and never read back.

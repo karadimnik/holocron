@@ -89,7 +89,7 @@ Windows paths are shown. On Linux and macOS the configuration folder is as in th
 | Port | What | Key |
 | --- | --- | --- |
 | 8787 TCP | web app, loopback only, no sign-in | `web.listen` |
-| 8443 TCP | web app over HTTPS on the LAN, sign-in; off until set | `web.tlsListen` (for example `192.168.1.50:8443`) |
+| 8443 TCP | web app over HTTPS on the LAN, sign-in; off until set | `web.tlsListen` (for example `192.168.1.50:8443`); the only port a router may forward, for `web.remoteHost` ([remote access](ui.md#reaching-holocron-from-outside-the-home-network)) - never 8787 |
 | 8554 TCP | relay RTSP (cameras served once, recorders read it) | `RelayBase` |
 | 9997 TCP | relay control API, loopback | `RelayApiBase` |
 | 8889 TCP | live view WHEP, loopback | `LiveWhepAddress` |

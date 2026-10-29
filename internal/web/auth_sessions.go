@@ -25,6 +25,12 @@ const (
 	lastSeenGranularity = 10 * time.Minute
 )
 
+// sessionLimits are the idle timeout and the absolute lifetime a session is held to.
+type sessionLimits struct{ idle, lifetime time.Duration }
+
+// lanSession are the LAN listener's limits; remoteSession (remote.go) are shorter.
+var lanSession = sessionLimits{idle: sessionIdleTimeout, lifetime: sessionLifetime}
+
 // Session is what the server remembers about a browser. The token itself exists
 // only in the browser's cookie: the server keeps its SHA-256, so a copy of
 // sessions.json cannot be replayed.
@@ -90,12 +96,19 @@ func (s *sessionStore) saveLocked() error {
 	return s.file.write(sessionsDoc{Version: authFileVersion, Sessions: list})
 }
 
-func (s *sessionStore) expired(sess Session, now time.Time) bool {
-	return !now.Before(sess.ExpiresAt) || !now.Before(sess.LastSeen.Add(sessionIdleTimeout))
+// expired applies the stored expiry and lim: a session ends at ExpiresAt, after lim.idle without
+// use, or lim.lifetime after it was created, whichever is first.
+func (s *sessionStore) expired(sess Session, now time.Time, lim sessionLimits) bool {
+	return !now.Before(sess.ExpiresAt) || !now.Before(sess.LastSeen.Add(lim.idle)) || !now.Before(sess.CreatedAt.Add(lim.lifetime))
 }
 
 // Create starts a session for userID and returns its token. Every login gets a new one.
 func (s *sessionStore) Create(userID string) (string, error) {
+	return s.createWithin(userID, lanSession)
+}
+
+// createWithin is Create with the lifetime of lim (a remote sign-in's session ends sooner).
+func (s *sessionStore) createWithin(userID string, lim sessionLimits) (string, error) {
 	raw := make([]byte, 32)
 	if _, err := rand.Read(raw); err != nil {
 		return "", err
@@ -106,14 +119,14 @@ func (s *sessionStore) Create(userID string) (string, error) {
 	s.loadLocked()
 	now := s.now()
 	for hash, sess := range s.sessions {
-		if s.expired(sess, now) {
+		if s.expired(sess, now, lanSession) {
 			delete(s.sessions, hash)
 		}
 	}
 	for s.countForLocked(userID) >= maxSessionsPerUser {
 		s.dropOldestLocked(userID)
 	}
-	s.sessions[hashToken(token)] = Session{TokenHash: hashToken(token), UserID: userID, CreatedAt: now, LastSeen: now, ExpiresAt: now.Add(sessionLifetime)}
+	s.sessions[hashToken(token)] = Session{TokenHash: hashToken(token), UserID: userID, CreatedAt: now, LastSeen: now, ExpiresAt: now.Add(lim.lifetime)}
 	if err := s.saveLocked(); err != nil {
 		return "", fmt.Errorf("save sessions: %w", err)
 	}
@@ -121,7 +134,11 @@ func (s *sessionStore) Create(userID string) (string, error) {
 }
 
 // Lookup finds the live session for a cookie value. An expired one is removed.
-func (s *sessionStore) Lookup(token string) (Session, bool) {
+func (s *sessionStore) Lookup(token string) (Session, bool) { return s.lookupWithin(token, lanSession) }
+
+// lookupWithin is Lookup holding the session to lim (a remote request: the remote limits, whatever
+// the session was created with).
+func (s *sessionStore) lookupWithin(token string, lim sessionLimits) (Session, bool) {
 	if token == "" || len(token) > 128 {
 		return Session{}, false
 	}
@@ -134,7 +151,7 @@ func (s *sessionStore) Lookup(token string) (Session, bool) {
 		return Session{}, false
 	}
 	now := s.now()
-	if s.expired(sess, now) {
+	if s.expired(sess, now, lim) {
 		delete(s.sessions, hash)
 		_ = s.saveLocked()
 		return Session{}, false
