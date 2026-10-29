@@ -20,16 +20,13 @@ A version is `MAJOR.MINOR.PATCH`, tagged `vMAJOR.MINOR.PATCH`. The public interf
 
 ## [Unreleased]
 
+## [1.3.0] - 2026-10-29
+
 ### Added
 
 - Remote access, off by default: `web.remoteHost` lets the HTTPS login listener answer to one public DNS name; requests from public peer addresses are viewer-only, with a stricter sign-in limit, shorter sessions, HSTS, a `web.remote` doctor check and a `holocron status` line ([docs/ui.md](docs/ui.md#reaching-holocron-from-outside-the-home-network)).
 - A trusted certificate for the remote name: with `web.remoteHost` set, a second local CA constrained to exactly that name serves its own server certificate by SNI (the LAN certificate is unchanged), installable only from the home network via the Phone tab or `holocron tls ca --remote`, checked by `holocron doctor`; remote sessions show "viewing only" ([docs/ui.md](docs/ui.md#reaching-holocron-from-outside-the-home-network)).
 - Live video from outside the home network, off by default: `LiveAdvertiseRemoteHost` offers the `web.remoteHost` name to browsers for video (resolved at each session, so a new public IP needs no restart) once the router forwards the media UDP port; a `live.remote` doctor check (`--deep` resolves the name), and live tiles that say why a session from outside gets no video ([docs/ui.md](docs/ui.md#live-video-from-outside-the-home-network)).
-
-## [1.2.0] - 2026-10-29
-
-### Added
-
 - Terminal: `holocron status` and `holocron doctor` name the running version on their first line (`holocron v1.1.2 status - root E:\cameras`, `holocron v1.1.2 (windows/amd64)`), and `holocron doctor --json` has a top-level `version`; `holocron help` already did.
 - Web app: every tab's footer shows `Holocron <version>` to signed-in users and on the loopback page (never on the sign-in or setup page), Admin > System has an "About this Holocron" block (version, platform, Go version, recording since), and a page left open across an upgrade says "Holocron was updated to <new>. Reload this page (Ctrl+F5) to use it." with a Reload button; `GET /api/status` gains an additive `app` object.
 
@@ -93,8 +90,8 @@ The first version of Holocron in its own repository: a Go network video recorder
 - Builds for Windows (first-class and live), Linux and macOS, cross-compiled and tested in CI.
 - Licence: [PolyForm Noncommercial License 1.0.0](LICENSE) (decision D22).
 
-[Unreleased]: https://github.com/karadimnik/holocron/compare/v1.2.0...HEAD
-[1.2.0]: https://github.com/karadimnik/holocron/compare/v1.1.2...v1.2.0
+[Unreleased]: https://github.com/karadimnik/holocron/compare/v1.3.0...HEAD
+[1.3.0]: https://github.com/karadimnik/holocron/compare/v1.1.2...v1.3.0
 [1.1.2]: https://github.com/karadimnik/holocron/compare/v1.1.1...v1.1.2
 [1.1.1]: https://github.com/karadimnik/holocron/compare/v1.1.0...v1.1.1
 [1.1.0]: https://github.com/karadimnik/holocron/compare/v1.0.1...v1.1.0

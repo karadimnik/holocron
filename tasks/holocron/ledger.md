@@ -149,6 +149,7 @@ Update this file in the same push as each merge: `git log --first-parent --merge
 | 7749c8a | 2026-10-29 | Merge Holocron B9: the running version in the web footer, an About block and a stale-page notice, and on the first line of status, doctor and help |  |
 | 0750082 | 2026-10-29 | Merge Holocron R13: opt-in remote access (web.remoteHost, off by default): Host admission, viewer cap by peer address, stricter remote sign-in and sessions, headers, doctor web.remote; certificate for the public name is the open decision D25 (needs a constrained second CA) |  |
 | f2ea208 | 2026-10-29 | Merge Holocron R14: remote CA constrained to exactly the remote name (pathlen 0, no IPs), served by SNI; installable only from the LAN; `tls ca --remote`; doctor checks and fingerprint; banner for remote sessions |  |
+| 0ab901a | 2026-10-29 | Merge Holocron R15: live video from outside the home network (LiveAdvertiseRemoteHost puts the DDNS name in webrtcAdditionalHosts; STUN rejected with MediaMTX v1.21.2 source evidence); doctor live.remote; tile explanations |  |
 
 ## Releases
 
