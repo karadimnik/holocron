@@ -23,7 +23,7 @@
 //   - A tile that is not playing says why, in plain words (signalling result,
 //     ICE states, how many candidates the browser and the server offered and of
 //     what kind, how long each step took) with a "Copy diagnostics" button.
-//     Only counts, types and an address CLASS (loopback, private, ...) are
+//     Only counts, types and an address CLASS (loopback, private, public, ...) are
 //     shown: never an address.
 //
 // getJSON and esc are app.js's and are looked up when called (app.js loads
@@ -150,6 +150,9 @@ const Live = (() => {
     if (/^127\./.test(address) || address === "::1") return "loopback";
     if (/^10\./.test(address) || /^192\.168\./.test(address) || /^172\.(1[6-9]|2\d|3[01])\./.test(address) || /^f[cd][0-9a-f]{2}:/i.test(address)) return "private";
     if (/^169\.254\./.test(address) || /^fe80:/i.test(address)) return "link-local";
+    // reachable from the internet: not the ranges above, CGNAT 100.64/10, 0/8 or multicast and reserved
+    if (/^\d+\.\d+\.\d+\.\d+$/.test(address) && !/^(0|100\.(6[4-9]|[7-9]\d|1[01]\d|12[0-7])|22[4-9]|2[3-5]\d)\./.test(address)) return "public";
+    if (/^[23][0-9a-f]{3}:/i.test(address)) return "public";
     return "other";
   }
 
@@ -241,7 +244,13 @@ const Live = (() => {
     const lines = [parts.join(" · ")];
     if (d.local) lines.push("browser offered " + summary(d.local) + (d.answer ? "; server offered " + summary(d.answer) : ""));
     if (tile.lastVerdict && trying) lines.push("last attempt: " + tile.lastVerdict);
-    if (d.answer && d.answer.length && d.conn !== "connected" && d.answer.every((c) => c.cls === "loopback") && (!trying || seconds(d) >= 5)) {
+    const stuck = d.answer && d.answer.length && d.conn !== "connected" && (!trying || seconds(d) >= 5);
+    // remoteSession is app.js's (api/auth/me remote: signed in from a public address)
+    if (stuck && remoteSession && !d.answer.some((c) => c.cls === "public")) {
+      lines.push("No public address offered for this outside connection. Run holocron doctor --deep on the PC (live.remote).");
+    } else if (stuck && remoteSession) {
+      lines.push("A public address was offered, but no video came. Check the router's UDP forward, the firewall and this network's UDP.");
+    } else if (stuck && d.answer.every((c) => c.cls === "loopback")) {
       lines.push("The server offers only loopback addresses, which some browsers (Firefox) refuse. Set LiveAdvertiseHosts, see docs/ui.md.");
     }
     return [head, lines.join("\n"), true];

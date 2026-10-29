@@ -579,3 +579,30 @@ func TestRemoteCertState(t *testing.T) {
 		}
 	}
 }
+
+// A live tile of a remote session that does not connect says why in words: no public address
+// offered (the doctor's live.remote line and the name's resolution), or one offered but no media
+// (router, firewall, the viewer's network). The LAN hint stays for LAN sessions; the session's
+// remoteness is app.js's, from api/auth/me.
+func TestLiveTileExplainsARemoteSessionWithoutVideo(t *testing.T) {
+	live, _ := staticFiles.ReadFile("static/live.js")
+	app, _ := staticFiles.ReadFile("static/app.js")
+	for _, want := range []string{
+		`if (/^\d+\.\d+\.\d+\.\d+$/.test(address) && !/^(0|100\.(6[4-9]|[7-9]\d|1[01]\d|12[0-7])|22[4-9]|2[3-5]\d)\./.test(address)) return "public";`,
+		`if (stuck && remoteSession && !d.answer.some((c) => c.cls === "public")) {`,
+		`"No public address offered for this outside connection. Run holocron doctor --deep on the PC (live.remote)."`,
+		`} else if (stuck && remoteSession) {`,
+		`"A public address was offered, but no video came. Check the router's UDP forward, the firewall and this network's UDP."`,
+		`} else if (stuck && d.answer.every((c) => c.cls === "loopback")) {`,
+		`"The server offers only loopback addresses, which some browsers (Firefox) refuse. Set LiveAdvertiseHosts, see docs/ui.md."`,
+	} {
+		if !strings.Contains(string(live), want) {
+			t.Errorf("live.js lacks %s", want)
+		}
+	}
+	for _, want := range []string{"let remoteSession = false;", "  remoteSession = remote;"} {
+		if !strings.Contains(string(app), want) {
+			t.Errorf("app.js lacks %s", want)
+		}
+	}
+}

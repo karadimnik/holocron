@@ -28,6 +28,7 @@ const POLL_MS = 5000;
 let viewOnly = false;
 let role = "admin"; // the loopback listener's owner is an admin; the LAN says per user
 let accessKnown = false; // detectAccess has run: until then nothing an admin alone may see is shown
+let remoteSession = false; // api/auth/me remote: signed in from a public address (live.js words its tile hints by it)
 
 const el = (id) => document.getElementById(id);
 
@@ -1468,6 +1469,7 @@ async function detectAccess() {
   el("viewOnly").classList.toggle("hide", !readOnly || viewer);
   el("viewerNote").classList.toggle("hide", !viewer || remote);
   el("remoteNote").classList.toggle("hide", !remote);
+  remoteSession = remote;
   // inert: not focusable, not clickable, hidden from assistive technology as editable.
   for (const panel of document.querySelectorAll('section[data-tab="set"] > .panel:not(#tlsPanel)')) panel.inert = viewOnly;
   // Settings are the admins'; the Admin tab also needs a listener that is not view-only.
