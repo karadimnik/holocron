@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
 	"net/url"
 	"strings"
@@ -18,6 +19,7 @@ var liveTable = []doctorCheck{
 	{id: "live.process", group: "live", run: liveProcess},
 	{id: "live.login", group: "live", concurrent: true, timeout: 8 * time.Second, run: liveLogin},
 	{id: "live.paths", group: "live", run: livePaths},
+	{id: "live.remote", group: "live", concurrent: true, run: liveRemote},
 }
 
 func init() { doctorTable = append(doctorTable, liveTable...) }
@@ -211,4 +213,53 @@ func livePaths(_ context.Context, r *drun) []check {
 		cs = append(cs, mk(lvOK, cam.Name, "live path(s) %s present (started on demand when watched)", strings.Join(have, ", ")))
 	}
 	return cs
+}
+
+// liveRemote: whether a viewer outside the home network (web.remoteHost) can receive the video.
+// Off without remote access. The router and the firewall cannot be seen from here, so it never says
+// they are right. With --deep it resolves web.remoteHost as MediaMTX does at each session.
+func liveRemote(ctx context.Context, r *drun) []check {
+	cfg := r.e.cfg
+	host := cfg.Web.RemoteHost
+	if host == "" || !cfg.LiveViewEnabled {
+		return nil
+	}
+	const (
+		title = "remote video"
+		docs  = "docs/ui.md, section \"Live video from outside the home network\""
+	)
+	udpHost, port, _ := net.SplitHostPort(cfg.LiveUdpAddress)
+	data := map[string]any{"remoteHost": host, "advertised": cfg.LiveAdvertiseRemoteHost, "udpAddress": cfg.LiveUdpAddress}
+	if !cfg.LiveAdvertiseRemoteHost {
+		c := mk(lvWarn, title, "remote access is on for %s, but a viewer outside the home network cannot receive video: no public address is offered (LiveAdvertiseRemoteHost is false)", host).data(data)
+		if udpHost == "127.0.0.1" {
+			return []check{c.fix("in %s set \"LiveUdpAddress\": \"0.0.0.0:%s\", \"LiveAdvertiseHosts\": [\"<this PC's LAN IPv4>\"] and \"LiveAdvertiseRemoteHost\": true (loopback %s cannot be forwarded), then holocron restart --detach ; see %s", r.e.paths.Config, port, cfg.LiveUdpAddress, docs)}
+		}
+		return []check{c.fix("holocron config set LiveAdvertiseRemoteHost true, then holocron restart --detach ; see %s", docs)}
+	}
+	target := udpHost
+	if udpHost == "0.0.0.0" {
+		target = "this PC's LAN address"
+	}
+	out := []check{mk(lvInfo, title, "offered to viewers outside the home network as %s, media on UDP %s: the router must forward UDP external port %s (the same number) to %s port %s, and Windows Firewall must allow it inbound from any address; the doctor cannot see the router", host, port, port, target, port).data(data)}
+	if !r.deep {
+		return out
+	}
+	lctx, cancel := context.WithTimeout(ctx, 2*time.Second)
+	defer cancel()
+	ips, err := r.d.lookupIP(lctx, host)
+	if err != nil {
+		return append(out, mk(lvWarn, title, "%s does not resolve on this PC (%v): the live instance skips it and offers no public address", host, err).fix("check the dynamic-DNS name and its update client ; nslookup %s", host))
+	}
+	var all, public []string
+	for _, ip := range ips {
+		all = append(all, ip.String())
+		if web.PeerIsRemote(ip.String()) {
+			public = append(public, ip.String())
+		}
+	}
+	if len(public) == 0 {
+		return append(out, mk(lvWarn, title, "%s resolves on this PC to %s only, none of them public: a viewer outside the home network is offered no public address", host, strings.Join(all, ", ")).fix("make %s resolve to this home's public address on this PC too (check the router's DNS and the hosts file) ; nslookup %s", host, host))
+	}
+	return append(out, mk(lvOK, title, "%s resolves on this PC to %s", host, strings.Join(all, ", ")))
 }
