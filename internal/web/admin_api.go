@@ -315,6 +315,7 @@ func (a *API) userRequest(w http.ResponseWriter, r *http.Request) (userRequest, 
 	if !decodeJSONBody(w, r, &req) {
 		return req, false
 	}
+	req.Username = formUsername(req.Username)
 	setTarget(r, cleanLoggedName(req.Username))
 	return req, true
 }

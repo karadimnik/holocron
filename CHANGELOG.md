@@ -20,6 +20,10 @@ A version is `MAJOR.MINOR.PATCH`, tagged `vMAJOR.MINOR.PATCH`. The public interf
 
 ## [Unreleased]
 
+### Fixed
+
+- Web app: signing in from a phone failed with "Invalid username or password" when the keyboard appended a space after the suggested user name; white space around a user name sent by the sign-in, setup or Admin form is now ignored (in the lookup, the per-name lockout and `auth.log`), the password is still taken exactly as typed ([docs/ui.md](docs/ui.md#first-run-the-setup-page-and-signing-in)).
+
 ## [1.3.0] - 2026-10-29
 
 ### Added

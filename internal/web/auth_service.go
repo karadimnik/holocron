@@ -344,7 +344,7 @@ func (a *authService) handleLogin(w http.ResponseWriter, r *http.Request) {
 		writeAPIError(w, http.StatusBadRequest, "bad request")
 		return
 	}
-	name := req.Username
+	name := formUsername(req.Username) // before the lookup, the lockout key and the log
 	setTarget(r, cleanLoggedName(name))
 
 	ok, wait := a.limiter.allow(sourceIP(r))
@@ -535,6 +535,7 @@ func (l *loopbackAuth) handleSetup(w http.ResponseWriter, r *http.Request) {
 		writeAPIError(w, http.StatusBadRequest, "bad request")
 		return
 	}
+	req.Username = formUsername(req.Username)
 	setTarget(r, cleanLoggedName(req.Username))
 	user, err := newUser(l.hasher, req.Username, req.Password, l.now())
 	if err != nil {
