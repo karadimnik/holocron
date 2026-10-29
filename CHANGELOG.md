@@ -20,6 +20,11 @@ A version is `MAJOR.MINOR.PATCH`, tagged `vMAJOR.MINOR.PATCH`. The public interf
 
 ## [Unreleased]
 
+### Added
+
+- Terminal: `holocron status` and `holocron doctor` name the running version on their first line (`holocron v1.1.2 status - root E:\cameras`, `holocron v1.1.2 (windows/amd64)`), and `holocron doctor --json` has a top-level `version`; `holocron help` already did.
+- Web app: every tab's footer shows `Holocron <version>` to signed-in users and on the loopback page (never on the sign-in or setup page), Admin > System has an "About this Holocron" block (version, platform, Go version, recording since), and a page left open across an upgrade says "Holocron was updated to <new>. Reload this page (Ctrl+F5) to use it." with a Reload button; `GET /api/status` gains an additive `app` object.
+
 ## [1.1.2] - 2026-10-29
 
 ### Changed

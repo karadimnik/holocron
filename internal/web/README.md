@@ -30,7 +30,7 @@ view-only gate on the TLS listener, the WHEP exception, certificate handling) wa
 in the headers. The choice is made per request and cached for 5 s (a start or a stop through `POST /api/control` expires it, so a Start right after a Stop is not refused as "already running"): the API controller when `<root>/_state/ctl.addr` answers within
 1 s, the API controller in its "stopped" form when it does not (Start runs `<holocron> up --detach` when
 `Launch` is set, otherwise answers 409 "start it with holocron up"; Stop, the record toggle and Reload answer 409).
-`GET /api/status` reports the choice in `controller`. In the Go system `PUT /api/cameras` and `PUT /api/config` go to `Options.Settings` (a `SettingsWriter`: the holocron web role
+`GET /api/status` reports the choice in `controller`. It also reports the running build in `app` (`version` is `internal/web.version`, the same ldflags value `holocron version` prints); `index.html` is served with that version in `<meta name="holocron-version">` (`stampedIndex`, `withIndex` in `main.go`; no new route), and `app.js` shows it in the footer and announces a newer `app.version` from a poll. In the Go system `PUT /api/cameras` and `PUT /api/config` go to `Options.Settings` (a `SettingsWriter`: the holocron web role
 supplies one over the shared edit helpers of `internal/app` and reloads the supervisor; the page's name and stream rules still run
 first, the address check is the writer's so `host:port` is accepted, and a blank stream is `stream1`; a writer's `invalid` rows
 answer 422 with the fields, an `ErrRefused` 422, any other error 500, nothing written), and answer 501 only when no writer was

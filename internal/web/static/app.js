@@ -1549,6 +1549,24 @@ showTab(roleTab(location.hash.slice(1)) ? "dash" : location.hash.slice(1) || "da
 
 let last = null;
 
+// The version this page was served with (the server writes it into index.html). A poll that
+// reports another one means Holocron was upgraded under this open page: say so once and offer a
+// reload; the same version again (a rollback) clears the notice.
+const pageVersion = (document.querySelector('meta[name="holocron-version"]') || {}).content || "";
+let announcedVersion = "";
+el("appVersion").textContent = pageVersion ? "Holocron " + pageVersion : "";
+el("updateReload").onclick = () => location.reload();
+
+function checkVersion(payload) {
+  const running = (payload && payload.app && payload.app.version) || "";
+  const changed = pageVersion && running && running !== pageVersion ? running : "";
+  if (changed === announcedVersion) return;
+  announcedVersion = changed;
+  el("updateText").textContent = changed ? "Holocron was updated to " + changed + ". Reload this page (Ctrl+F5) to use it." : "";
+  el("updateReload").hidden = !changed;
+  el("updateNotice").classList.toggle("on", !!changed);
+}
+
 async function poll() {
   try {
     const response = await fetch("api/status", { cache: "no-store" });
@@ -1558,7 +1576,9 @@ async function poll() {
       location.reload();
       return;
     }
+    checkVersion(last);
     render(last, null);
+    if (window.Admin) window.Admin.status(last);
   } catch (err) {
     render(last, err.message || String(err));
   }

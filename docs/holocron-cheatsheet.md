@@ -43,13 +43,13 @@ One page of lookups. First time here: [holocron-quickstart.md](holocron-quicksta
 | see what install would do | `holocron install --dry-run` |
 | open the web app / print its address | `holocron open` / `holocron open --print` |
 | test the alert channels | `holocron alert test` |
-| see the version | `holocron version` |
+| see the version | `holocron version`; `holocron status`, `holocron doctor` and `holocron help` also name it on their first line, the web app in its page footer |
 
 Names with a space need quotes: `holocron cam enable "Front Door"`. `--since` takes `10m`, `24h` or a time like `2026-10-22T09:00:00+03:00`, not `1d`.
 
 ## Health check
 
-`holocron doctor` is read-only: it starts, stops and restarts nothing, opens no camera session beyond RTSP OPTIONS and writes only a small probe file in each of four folders (root, state, logs, configuration) that it removes again. Every line is `ok`, `info`, `warn` or `fail`; every `warn` and `fail` has a `fix:` line under it with the command or the edit. The last line is `HEALTHY`, `DEGRADED (n warning(s))`, `BROKEN (n failure(s))` or `NOT RUNNING` (then each runtime group says `not checked: nothing is running`). Exit 1 when any line is `fail`, else 0.
+`holocron doctor` is read-only: it starts, stops and restarts nothing, opens no camera session beyond RTSP OPTIONS and writes only a small probe file in each of four folders (root, state, logs, configuration) that it removes again. The first line names the build: `holocron <version> (<os>/<arch>)`, for example v1.1.2 on windows/amd64. Every other line is `ok`, `info`, `warn` or `fail`; every `warn` and `fail` has a `fix:` line under it with the command or the edit. The last line is `HEALTHY`, `DEGRADED (n warning(s))`, `BROKEN (n failure(s))` or `NOT RUNNING` (then each runtime group says `not checked: nothing is running`). Exit 1 when any line is `fail`, else 0.
 
 | Group | Checks |
 | --- | --- |
@@ -61,7 +61,7 @@ Names with a space need quotes: `holocron cam enable "Front Door"`. `--since` ta
 | `storage` | free space against the reserve (at the reserve edge is normal), the pruner's last run (blocked fails, circuit breaker warns), the ownership marker, segments per camera in 24 h (a misfiled segment warns), files the pruner cannot see (`storage.unseen`: a misfiled segment, anything else in a day folder, a segment in a folder it does not enter: warns), spool backlog (`storage.backlog`: warns when a camera folder holds more than 4 segments 15 minutes after the supervisor started, so the mover is stuck) |
 | `system` | stray or orphan processes, a supervisor that no Holocron host started (for example the old PowerShell system's), two supervisors, autostart runs this executable with this config, log errors of 24 h, alert channels, version, `HOLOCRON_SANDBOX_ONLY` / camera login variables in this window |
 
-`--json` prints one document: `schema` 1, `root`, `groups`, `checks` (`id`, `group`, `level`, `title`, `detail`, `fix`, `data`) and `summary` (`verdict`, `running`, counts, `elapsedMs`).
+`--json` prints one document: `schema` 1, `version`, `root`, `groups`, `checks` (`id`, `group`, `level`, `title`, `detail`, `fix`, `data`) and `summary` (`verdict`, `running`, counts, `elapsedMs`).
 
 ## Files and folders
 

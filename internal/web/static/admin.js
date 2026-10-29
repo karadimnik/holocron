@@ -132,6 +132,13 @@
   <div class="panel apanel" id="aSystemPanel">
     <header><h2>System</h2></header>
     <div class="form">
+      <h3>About this Holocron</h3>
+      <dl class="about">
+        <dt>Version</dt><dd id="aAboutVersion">-</dd>
+        <dt>Platform</dt><dd id="aAboutPlatform">-</dd>
+        <dt>Go</dt><dd id="aAboutGo">-</dd>
+        <dt>Recording since</dt><dd id="aAboutStarted">-</dd>
+      </dl>
       <h3>Reload configuration</h3>
       <p class="hint">Re-reads <code>cameras.json</code> and <code>holocron.config.json</code> now instead of at the next check. Live view on or off applies at once; other changed settings still need a restart. Recording carries on.</p>
       <div class="actions"><button class="btn" id="aReload" type="button">Reload configuration</button><span class="formnote" id="aReloadNote" role="status"></span></div>
@@ -605,6 +612,18 @@
     if (go) stopHolocron();
   }
 
+  // The About block, from each GET /api/status poll (app.js): the build of the running web app and
+  // when the supervisor started.
+  function status(payload) {
+    if (!built || !payload) return;
+    const app = payload.app || {};
+    el("aAboutVersion").textContent = app.version || "unknown";
+    el("aAboutPlatform").textContent = app.os && app.arch ? app.os + "/" + app.arch : "unknown";
+    el("aAboutGo").textContent = app.go || "unknown";
+    const started = payload.supervisor && payload.supervisor.running && payload.status && payload.status.StartedAt;
+    el("aAboutStarted").textContent = started ? new Date(String(started)).toLocaleString() : "not running";
+  }
+
   // ---------------------------------------------------------------- wiring
   function build() {
     const section = document.querySelector('section[data-tab="admin"]');
@@ -651,6 +670,7 @@
 
   function show() {
     if (!built) build();
+    status(last);
     loadHealth();
     loadUsers();
     loadCamera();
@@ -661,5 +681,5 @@
     loadAutostart();
   }
 
-  window.Admin = { show };
+  window.Admin = { show, status };
 })();

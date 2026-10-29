@@ -8,6 +8,7 @@ import (
 	"net"
 	"net/http"
 	"os/exec"
+	"runtime"
 	"strings"
 	"sync"
 	"time"
@@ -172,6 +173,7 @@ type doctorSummary struct {
 // doctorReport is `doctor --json`.
 type doctorReport struct {
 	Schema  int           `json:"schema"`
+	Version string        `json:"version"`
 	Root    string        `json:"root"`
 	Groups  []string      `json:"groups"`
 	Checks  []check       `json:"checks"`
@@ -209,7 +211,7 @@ func cmdDoctor(ctx context.Context, e *env) error {
 		}
 	}
 	if e.sandboxErr != nil {
-		rep := doctorReport{Schema: 1, Root: e.paths.Root, Groups: []string{"setup"}, Checks: []check{sandboxRefused(e.sandboxErr)}}
+		rep := doctorReport{Schema: 1, Version: version, Root: e.paths.Root, Groups: []string{"setup"}, Checks: []check{sandboxRefused(e.sandboxErr)}}
 		rep.Summary = summarize(rep.Checks, false, 0)
 		if e.json {
 			printJSON(e.out, rep)
@@ -249,7 +251,7 @@ func buildDoctor(ctx context.Context, e *env, sel map[string]bool, deep, inWeb b
 	if errors.Is(readErr(e), status.ErrNoStatus) {
 		r.downWhy = "no status file has been written yet"
 	}
-	rep := doctorReport{Schema: 1, Root: e.paths.Root, Checks: r.runAll(ctx, sel)}
+	rep := doctorReport{Schema: 1, Version: version, Root: e.paths.Root, Checks: r.runAll(ctx, sel)}
 	for _, g := range doctorGroups {
 		if sel[g] {
 			rep.Groups = append(rep.Groups, g)
@@ -413,6 +415,9 @@ func (s doctorSummary) line() string {
 }
 
 func printDoctor(w io.Writer, rep doctorReport, quiet bool) {
+	if !quiet {
+		fmt.Fprintf(w, "holocron %s (%s/%s)\n", rep.Version, runtime.GOOS, runtime.GOARCH)
+	}
 	group := ""
 	for _, c := range rep.Checks {
 		if quiet && (c.Level == lvOK || c.Level == lvInfo) {

@@ -285,7 +285,7 @@ func relayExternalText(cfg config.Config) string {
 
 func printStatus(e *env, r statusReport) {
 	w := e.out
-	fmt.Fprintf(w, "holocron status - root %s\n", r.Root)
+	fmt.Fprintf(w, "holocron %s status - root %s\n", version, r.Root)
 	d := r.Status
 	if r.Running {
 		fmt.Fprintf(w, "supervisor: RUNNING pid %d since %s, heartbeat %s ago\n", d.SupervisorPid, stamp(d.StartedAt), ago(d.UpdatedAt))

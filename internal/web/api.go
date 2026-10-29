@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"os"
 	"regexp"
+	"runtime"
 	"strings"
 	"sync"
 	"time"
@@ -30,6 +31,22 @@ type StatusResponse struct {
 	// Acknowledged maps a persistent notice's key to the timestamp of the
 	// event the Operator has said he has seen. See notice.go.
 	Acknowledged map[string]string `json:"acknowledged"`
+
+	// App is the build this web app runs. The page compares App.Version with the version it was
+	// served with (index.html) to notice a Holocron upgraded under an open page.
+	App AppInfo `json:"app"`
+}
+
+// AppInfo is the running build: the version `holocron version` prints and the Go runtime.
+type AppInfo struct {
+	Version string `json:"version"`
+	OS      string `json:"os"`
+	Arch    string `json:"arch"`
+	Go      string `json:"go"`
+}
+
+func appInfo() AppInfo {
+	return AppInfo{Version: version, OS: runtime.GOOS, Arch: runtime.GOARCH, Go: runtime.Version()}
 }
 
 // StatusFileInfo describes the status.json read, so the page can tell live data
@@ -125,6 +142,7 @@ func (a *API) handleStatus(w http.ResponseWriter, r *http.Request) {
 		StatusFile: StatusFileInfo{Path: a.cfg.StatusFile},
 		Tasks:      a.controller().TaskStates(),
 		Controller: a.controller().Name(),
+		App:        appInfo(),
 	}
 
 	status, info, err := a.readStatus()

@@ -671,6 +671,20 @@ func (l liveInspector) Inspect(pid int) (osx.ProcInfo, error) {
 }
 func (liveInspector) Stop(osx.ChildEntry) error { return errors.New("never") }
 
+// status opens with the running build's version and the root; the exit code stays the verdict.
+func TestStatusFirstLineNamesTheVersion(t *testing.T) {
+	setVersion(t, "v9.9.9")
+	r := newRig(t)
+	out, _, code := r.run("status")
+	if first, _, _ := strings.Cut(out, "\n"); first != "holocron v9.9.9 status - root "+r.root || code != 1 {
+		t.Errorf("exit %d, first line %q", code, first)
+	}
+	r.running()
+	if out, _, code = r.run("status"); !strings.HasPrefix(out, "holocron v9.9.9 status - root ") || code != 0 {
+		t.Errorf("running: exit %d:\n%s", code, out)
+	}
+}
+
 // status shows the web role: pid found by identity in the aux registry, the listen address, TLS and the login.
 func TestStatusShowsTheWebRole(t *testing.T) {
 	r := newRig(t)

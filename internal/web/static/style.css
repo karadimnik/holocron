@@ -144,6 +144,10 @@ tr:hover td{background:#1e1e1c}
 .events .t{color:var(--ink-2);flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 
 footer.note{margin-top:22px;color:var(--ink-3);font-size:12px;border-top:1px solid var(--line-soft);padding-top:12px}
+footer.appver{margin-top:10px;color:var(--ink-3);font-size:12px}
+.update-notice p{margin:0}
+.update-notice.on{display:flex;flex-wrap:wrap;align-items:center;gap:8px 14px;background:var(--surface-2);border:1px solid var(--line);
+  border-left:4px solid var(--accent);border-radius:var(--r);padding:10px var(--pad);margin-bottom:14px;color:var(--ink);font-size:13px}
 
 /* ---- forms (settings) ----
    The field, row and linkbtn treatments are the mockup's. The phone rule below
@@ -410,6 +414,9 @@ body.authpage{display:grid;place-items:center;min-height:100vh;padding:18px}
 /* ---------- Admin tab (admin.js) ---------- */
 .apanel{margin-bottom:16px}
 .apanel h3{font-size:13px;color:var(--ink-2)}
+.about{display:grid;grid-template-columns:max-content minmax(0,1fr);gap:4px 16px;margin:0 0 6px;font-size:13px}
+.about dt{color:var(--ink-2)}
+.about dd{margin:0;overflow-wrap:anywhere}
 .apanel .form{grid-template-columns:minmax(0,1fr)}
 .apanel .events .t{white-space:normal;overflow-wrap:anywhere}
 .apanel>header .muted{overflow-wrap:anywhere;text-align:right}
