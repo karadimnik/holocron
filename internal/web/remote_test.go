@@ -2,9 +2,12 @@ package web
 
 import (
 	"encoding/json"
+	"fmt"
+	"net/http"
 	"slices"
 	"strings"
 	"testing"
+	"time"
 )
 
 const remoteName = "remote.example.org"
@@ -192,5 +195,108 @@ func TestRemoteIsViewOnlyEvenWhenReadWrite(t *testing.T) {
 	rq := tlsReq{method: "POST", path: "/api/auth/logout", host: remoteName, remote: publicPeer, cookie: cookie, headers: jsonHdr}
 	if rec := rig.do(rq); rec.Code != 200 {
 		t.Errorf("remote sign-out: %d", rec.Code)
+	}
+}
+
+// A public peer gets 3 quick sign-in attempts, then one every 30 s; an IPv6 /64 is one peer; a LAN
+// peer keeps the LAN bucket (5 banked). Each attempt is audited with the peer address.
+func TestRemoteSignInBucket(t *testing.T) {
+	rig := remoteRig(t, nil)
+	try := func(peer, host string, i int) int {
+		return rig.do(tlsReq{method: "POST", path: "/api/auth/login", host: host, remote: peer, headers: jsonHdr, body: loginBody(fmt.Sprintf("nobody%d", i), "wrong password here")}).Code
+	}
+	for i := 0; i < 3; i++ {
+		if code := try(publicPeer, remoteName, i); code != 401 {
+			t.Fatalf("remote attempt %d: %d", i+1, code)
+		}
+	}
+	if code := try(publicPeer, remoteName, 3); code != 429 {
+		t.Errorf("4th quick remote attempt: %d, want 429", code)
+	}
+	rig.clock.advance(30 * time.Second)
+	if code := try(publicPeer, remoteName, 4); code != 401 {
+		t.Errorf("remote attempt after 30 s: %d", code)
+	}
+	for i := 0; i < 5; i++ {
+		if code := try(lanPeer, lanHost, 10+i); code != 401 {
+			t.Errorf("LAN attempt %d: %d", i+1, code)
+		}
+	}
+	for i, peer := range []string{"[2001:db8:0:5::1]:1", "[2001:db8:0:5::2]:1", "[2001:db8:0:5:ffff::9]:1"} {
+		if code := try(peer, remoteName, 20+i); code != 401 {
+			t.Errorf("IPv6 attempt %d: %d", i+1, code)
+		}
+	}
+	if code := try("[2001:db8:0:5::77]:1", remoteName, 30); code != 429 {
+		t.Errorf("4th attempt from the same /64: %d", code)
+	}
+	if code := try("[2001:db8:0:6::1]:1", remoteName, 31); code != 401 {
+		t.Errorf("another /64: %d", code)
+	}
+	logs := rig.logs.String()
+	if !strings.Contains(logs, "from=203.0.113.7 peer=remote") || !strings.Contains(logs, "result=throttled") || strings.Contains(logs, "wrong password here") {
+		t.Error("sign-in audit records are missing the peer, the result, or leak the password")
+	}
+}
+
+// A remote session ends after 12 h idle or 7 days; the cookie says 7 days; LAN sessions keep 7 and 30 days.
+func TestRemoteSessionLimits(t *testing.T) {
+	rig := remoteRig(t, nil)
+	rec := rig.do(tlsReq{method: "POST", path: "/api/auth/login", host: remoteName, remote: publicPeer, headers: jsonHdr, body: loginBody(viewerName, testPassword)})
+	var cookie *http.Cookie
+	for _, c := range rec.Result().Cookies() {
+		if c.Name == sessionCookie {
+			cookie = c
+		}
+	}
+	if cookie == nil || cookie.MaxAge != 7*24*3600 || !cookie.Secure || !cookie.HttpOnly || cookie.SameSite != http.SameSiteStrictMode {
+		t.Fatalf("remote cookie %+v", cookie)
+	}
+	lan, _ := rig.signInFrom(t, viewerName, lanPeer, lanHost)
+	status := func(c, peer, host string) int {
+		return rig.do(tlsReq{path: "/api/status", host: host, remote: peer, cookie: c}).Code
+	}
+	rig.clock.advance(11 * time.Hour)
+	if status(cookie.Value, publicPeer, remoteName) == 401 {
+		t.Error("remote session ended before 12 h idle")
+	}
+	rig.clock.advance(12*time.Hour + time.Minute)
+	if status(cookie.Value, publicPeer, remoteName) != 401 {
+		t.Error("remote session outlived 12 h idle")
+	}
+	if status(lan, lanPeer, lanHost) == 401 {
+		t.Error("LAN session ended after 23 h")
+	}
+	// A LAN session presented by a public peer is held to the remote limits (and ended).
+	rig.clock.advance(13 * time.Hour)
+	if status(lan, publicPeer, remoteName) != 401 {
+		t.Error("a LAN session idle 13 h was accepted from a public peer")
+	}
+
+	s := newSessionStore(t.TempDir(), rig.clock.now)
+	now := rig.clock.now()
+	fresh := Session{CreatedAt: now.Add(-8 * 24 * time.Hour), LastSeen: now, ExpiresAt: now.Add(22 * 24 * time.Hour)}
+	if !s.expired(fresh, now, remoteSession) || s.expired(fresh, now, lanSession) {
+		t.Error("the 7-day remote lifetime is not applied, or the LAN one changed")
+	}
+}
+
+// Remote answers carry HSTS (a day, nothing more), nosniff and no-store on API answers, refusals
+// included; LAN answers carry no HSTS (unchanged).
+func TestRemoteResponseHeaders(t *testing.T) {
+	rig := remoteRig(t, nil)
+	cookie, _ := rig.signInFrom(t, viewerName, publicPeer, remoteName)
+	for _, q := range []tlsReq{{path: "/api/status", cookie: cookie}, {path: "/api/status"}, {path: "/api/admin/users", cookie: cookie}, {path: "/login"}} {
+		q.host, q.remote = remoteName, publicPeer
+		h := rig.do(q).Header()
+		if h.Get("Strict-Transport-Security") != "max-age=86400" || h.Get("X-Content-Type-Options") != "nosniff" || h.Get("Referrer-Policy") != "no-referrer" {
+			t.Errorf("%s: %v", q.path, h)
+		}
+		if strings.HasPrefix(q.path, "/api/") && h.Get("Cache-Control") != "no-store" {
+			t.Errorf("%s: Cache-Control %q", q.path, h.Get("Cache-Control"))
+		}
+	}
+	if h := rig.do(tlsReq{path: "/login", remote: lanPeer}).Header(); h.Get("Strict-Transport-Security") != "" {
+		t.Errorf("LAN answer carries HSTS: %v", h)
 	}
 }

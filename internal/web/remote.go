@@ -3,6 +3,8 @@ package web
 import (
 	"net/http"
 	"net/netip"
+	"strings"
+	"time"
 )
 
 // ---------------------------------------------------------------------------
@@ -41,4 +43,46 @@ func PeerIsRemote(ip string) bool {
 // remote reports whether r is a remote request (RemoteHost set and a public peer).
 func (a *authService) remote(r *http.Request) bool {
 	return a.remoteHost != "" && PeerIsRemote(sourceIP(r))
+}
+
+// A remote session ends after 12 hours without use or 7 days after sign-in, whichever is first
+// (LAN: 7 days idle, 30 days). A phone that checks the cameras daily signs in about once a week;
+// a forgotten or stolen session stops working within half a day of disuse.
+var remoteSession = sessionLimits{idle: 12 * time.Hour, lifetime: 7 * 24 * time.Hour}
+
+// Remote sign-in attempts take a second, stricter token bucket per peer beside the LAN one
+// (10 a minute, 5 banked): 2 a minute, 3 banked. Three quick tries cover a mistyped password;
+// after that one address gets one guess every 30 s, and the per-name lockout (5 free failures,
+// then 30 s doubling to 15 min) still bounds the guesses on any one name from all addresses.
+const (
+	remoteLoginRatePerMinute = 2
+	remoteLoginBurst         = 3
+)
+
+// remotePeerKey is the remote bucket's key: an IPv4 address, or the /64 of an IPv6 one (one
+// subscriber holds a whole /64, so per-address buckets would not limit anything).
+func remotePeerKey(ip string) string {
+	addr, err := netip.ParseAddr(ip)
+	if err != nil {
+		return ip
+	}
+	addr = addr.Unmap()
+	if addr.Is4() {
+		return addr.String()
+	}
+	p, _ := addr.WithZone("").Prefix(64)
+	return p.String()
+}
+
+// remoteHeaders are the response headers of every remote answer: HSTS for a day (not
+// includeSubDomains, not preload: the name is the Operator's dynamic-DNS name and only it), no
+// MIME sniffing, and no caching of API answers (the guard sets the last two for the routes it
+// passes; a refusal by the gate never reaches it). Referrer-Policy is set for the whole listener.
+func remoteHeaders(w http.ResponseWriter, r *http.Request) {
+	h := w.Header()
+	h.Set("Strict-Transport-Security", "max-age=86400")
+	h.Set("X-Content-Type-Options", "nosniff")
+	if strings.HasPrefix(r.URL.Path, "/api/") {
+		h.Set("Cache-Control", "no-store")
+	}
 }
