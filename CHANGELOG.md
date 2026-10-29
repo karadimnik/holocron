@@ -20,6 +20,8 @@ A version is `MAJOR.MINOR.PATCH`, tagged `vMAJOR.MINOR.PATCH`. The public interf
 
 ## [Unreleased]
 
+## [1.1.1] - 2026-10-29
+
 ### Fixed
 
 - `holocron doctor`: the `recording.segment` check no longer warns at every sunrise and sunset, when a camera switches between its infrared night and colour day profiles and its bitrate changes 3 to 4 times; it now judges the newest closed segment against the camera's closed segments of the last 24 h (a warning below half the lowest rate, a stalled or black stream, or above 1.5 times the peak rate, a runaway) instead of the median of 2 h, which is still shown; an empty closed segment warns ("no data") and is never part of the baseline. The JSON data adds `peakRatio`, `lowestRatio` and `peakCompared`.
@@ -71,7 +73,8 @@ The first version of Holocron in its own repository: a Go network video recorder
 - Builds for Windows (first-class and live), Linux and macOS, cross-compiled and tested in CI.
 - Licence: [PolyForm Noncommercial License 1.0.0](LICENSE) (decision D22).
 
-[Unreleased]: https://github.com/karadimnik/holocron/compare/v1.1.0...HEAD
+[Unreleased]: https://github.com/karadimnik/holocron/compare/v1.1.1...HEAD
+[1.1.1]: https://github.com/karadimnik/holocron/compare/v1.1.0...v1.1.1
 [1.1.0]: https://github.com/karadimnik/holocron/compare/v1.0.1...v1.1.0
 [1.0.1]: https://github.com/karadimnik/holocron/compare/v1.0.0...v1.0.1
 [1.0.0]: https://github.com/karadimnik/holocron/releases/tag/v1.0.0

@@ -144,6 +144,7 @@ Update this file in the same push as each merge: `git log --first-parent --merge
 | 933a359 | 2026-10-28 | Merge Holocron R10: quickstart for every platform; Go test that the README download version equals the newest released CHANGELOG version |  |
 | 0fb97db | 2026-10-28 | Merge Holocron R11: Dashboard shows only the Start or Stop control that fits the state; Start right after Stop no longer refused (control-path cache expired) |  |
 | 1d3e191 | 2026-10-28 | Merge Holocron R12: Dashboard redesign (status summary, no Start/Stop row, record Undo), Admin > System with Reload and typed-confirmation Stop, stopped panel, 390 px and contrast fixes; page named Holocron |  |
+| 45562f7 | 2026-10-29 | Merge Holocron B7: doctor segment-rate check uses the last 24 h (sunrise and sunset ramps no longer warn; empty segments warn as no data and never enter a baseline) |  |
 
 ## Releases
 
