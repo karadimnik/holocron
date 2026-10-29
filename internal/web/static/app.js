@@ -205,7 +205,9 @@ function cameraChip(cam, live) {
   if (!live) return chip("off", "Stopped");
   if (!cam.Record) return chip("off", "Not recording");
   if (!cam.Alive) return chip("crit", "Camera offline");
-  if (cam.RestartsLastHour > 0) return chip("ser", "Recovering");
+  // One or two restarts in the hour are handled by the supervisor and told by the camera note; three or more
+  // (the doctor warns at 3) mean the camera or the stream is not holding.
+  if (cam.RestartsLastHour >= 3) return chip("ser", "Unstable");
   return chip("good", "Recording");
 }
 
@@ -215,17 +217,97 @@ function inputChip(cam, live) {
   return chip("warn", "Direct");
 }
 
+// CAMERA_ERRORS puts into words the LastError texts the supervisor writes
+// (internal/supervise: Exited and StartFailed in account.go, the stall kill in
+// plan.go). Exit code 0 is ffmpeg ending normally because its input stream
+// ended. A text not listed here is shown as it is.
+const CAMERA_ERRORS = [
+  [/^ffmpeg exited with code 0 after (\d+)s$/, (m) => "the camera stream ended after " + duration(+m[1])],
+  [/^ffmpeg exited with code (-?\d+) after (\d+)s$/, (m) => "the recorder stopped unexpectedly (exit code " + m[1] + ") after " + duration(+m[2])],
+  [/^stalled, no segment write for (\d+)s \(limit \d+s\) while the process was alive$/, (m) => "the recording stalled (no new footage for " + duration(+m[1]) + ")"],
+  [/^failed to start: /, () => "the recorder could not start"],
+];
+
+// A note older than this, on a camera that is recording, is kept under Details only.
+const NOTE_VISIBLE_MS = 24 * 3600 * 1000;
+
+// duration is "4 h 40 min": the two largest units, rounded down.
+function duration(seconds) {
+  const s = Math.max(0, Math.floor(seconds));
+  if (s < 60) return s + " s";
+  if (s < 3600) return Math.floor(s / 60) + " min";
+  if (s < 86400) return Math.floor(s / 3600) + " h" + (s % 3600 >= 60 ? " " + Math.floor((s % 3600) / 60) + " min" : "");
+  return Math.floor(s / 86400) + " d" + (s % 86400 >= 3600 ? " " + Math.floor((s % 86400) / 3600) + " h" : "");
+}
+
+// noteSentence says what happened, when (the viewer's local time; no time when
+// at is null) and whether it is handled. now is the poll time in ms.
+function noteSentence(message, at, alive, now) {
+  let words = "the recorder reported: " + message;
+  for (const [pattern, say] of CAMERA_ERRORS) {
+    const match = pattern.exec(message);
+    if (match) {
+      words = say(match);
+      break;
+    }
+  }
+  let lead = "";
+  if (at) {
+    const clock = at.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+    const yesterday = new Date(now);
+    yesterday.setDate(yesterday.getDate() - 1);
+    if (at.toDateString() === new Date(now).toDateString()) lead = "At " + clock;
+    else if (at.toDateString() === yesterday.toDateString()) lead = "Yesterday at " + clock;
+    else lead = "On " + at.toLocaleDateString([], { day: "numeric", month: "short" }) + " at " + clock;
+  }
+  const what = lead ? lead + " " + words : words.charAt(0).toUpperCase() + words.slice(1);
+  return what + ". " + (alive ? "Restarted automatically; recording resumed." : "Not recording now.");
+}
+
+const NOTE_ICON = {
+  info: '<circle cx="10" cy="10" r="8.5"/><path d="M10 9v5M10 6.2v.3"/>',
+  bad: '<circle cx="10" cy="10" r="8.5"/><path d="M7 7l6 6M13 7l-6 6"/>',
+};
+
+// cameraNote turns cam.LastError into a note: an icon and the sentence (a calm
+// note while the camera records, the error colour while it does not), the raw
+// text in the tooltip and under a Details disclosure. It is not a live region,
+// so a poll does not announce it. A note older than NOTE_VISIBLE_MS on a
+// recording camera is quiet: the caller shows its usual line and only the
+// Details. open holds the keys of the disclosures that were open before this poll.
+function cameraNote(cam, open) {
+  const raw = String(cam.LastError);
+  const when = new Date(String(cam.LastErrorAt || ""));
+  const at = isNaN(when.getTime()) ? null : when;
+  const alive = !!cam.Alive;
+  const now = Date.now();
+  const sentence = noteSentence(raw, at, alive, now);
+  // A camera the Operator switched off on purpose, or an old hiccup on a camera that is recording, is not news.
+  const quiet = cam.Record === false || (alive && at !== null && now - at.getTime() > NOTE_VISIBLE_MS);
+  const key = cam.Name + "|" + (cam.LastErrorAt || "") + "|" + raw;
+  const details = '<details class="cnote-more" data-key="' + esc(key) + '"' + (open.has(key) ? " open" : "") +
+    "><summary>Details</summary>" + (quiet ? "<p>" + esc(sentence) + "</p>" : "") + "<code>" + esc(raw) + "</code></details>";
+  if (quiet) return { quiet, html: details };
+  return {
+    quiet,
+    html: '<div class="cnote' + (alive ? "" : " bad") + '" title="' + esc(raw) + '"><svg viewBox="0 0 20 20" width="14" height="14" aria-hidden="true" focusable="false" ' +
+      'fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">' + NOTE_ICON[alive ? "info" : "bad"] + "</svg><span>" + esc(sentence) + "</span></div>" + details,
+  };
+}
+
 // cameraDetail is the second line of a camera's cell. DownSince wins over the
 // segment count and over LastError: a camera that has written nothing since a
 // known time is the thing the Operator has to see.
-function cameraDetail(cam, live) {
+function cameraDetail(cam, live, open) {
   if (live && cam.DownSince) {
     return '<div class="err">No footage since ' + since(cam.DownSince) + "</div>";
   }
+  const meta = '<div class="cam-meta">' + (cam.ArchiveFiles || 0) + " segments &middot; " + num(gb(cam.ArchiveBytes)) + " GB</div>";
   if (live && cam.LastError) {
-    return '<div class="err" title="' + esc(cam.LastError) + '">' + esc(cam.LastError) + "</div>";
+    const note = cameraNote(cam, open);
+    return (note.quiet ? meta : "") + note.html;
   }
-  return '<div class="cam-meta">' + (cam.ArchiveFiles || 0) + " segments &middot; " + num(gb(cam.ArchiveBytes)) + " GB</div>";
+  return meta;
 }
 
 function toggle(cam, live) {
@@ -376,9 +458,12 @@ function render(payload, fetchError) {
   // ---- layout A: table ----
   // Both layouts are rebuilt on every poll; a switch that had the focus gets it back.
   const focused = document.activeElement && document.activeElement.matches(".tgl[data-camera]") ? document.activeElement.dataset.camera : null;
+  // So does a camera note's Details: an open one stays open, a focused one keeps the focus.
+  const openNotes = new Set([...document.querySelectorAll("details.cnote-more[open]")].map((d) => d.dataset.key));
+  const focusedNote = document.activeElement && document.activeElement.matches("details.cnote-more > summary") ? document.activeElement.parentElement.dataset.key : null;
   el("tbody").innerHTML = cams.map((cam) =>
     '<tr data-cam="' + esc(cam.Name) + '">' +
-    '<td><div class="cam-name">' + esc(cam.Name) + "</div>" + cameraDetail(cam, live) + "</td>" +
+    '<td><div class="cam-name">' + esc(cam.Name) + "</div>" + cameraDetail(cam, live, openNotes) + "</td>" +
     "<td>" + cameraChip(cam, live) + "</td>" +
     "<td>" + inputChip(cam, live) + "</td>" +
     '<td class="num">' + (live ? age(cam.SecondsSinceLastClosedSegment) : "&mdash;") + "</td>" +
@@ -387,17 +472,19 @@ function render(payload, fetchError) {
 
   // ---- layout C: compact rows ----
   el("camsC").innerHTML = cams.map((cam) => {
-    const sub = !live
-      ? "Stopped"
-      : cam.DownSince
-        ? "No footage since " + since(cam.DownSince)
-        : cam.LastError
-          ? esc(cam.LastError)
-          : esc(cam.InputMode) + " &middot; " + age(cam.SecondsSinceLastClosedSegment) + " &middot; " + num(gb(cam.ArchiveBytes)) + " GB";
+    const meta = esc(cam.InputMode) + " &middot; " + age(cam.SecondsSinceLastClosedSegment) + " &middot; " + num(gb(cam.ArchiveBytes)) + " GB";
+    const note = live && !cam.DownSince && cam.LastError ? cameraNote(cam, openNotes) : null;
+    const sub = !live ? "Stopped" : cam.DownSince ? "No footage since " + since(cam.DownSince) : meta;
+    // The note takes a full-width line of its own below the row: beside the chip and the switch it was a narrow column.
     return '<div class="crow" data-cam="' + esc(cam.Name) + '"><div class="main"><div class="nm">' + esc(cam.Name) + "</div>" +
-      '<div class="sb">' + sub + "</div></div>" + cameraChip(cam, live) + toggle(cam, live) + "</div>";
+      '<div class="sb">' + sub + "</div></div>" + cameraChip(cam, live) + toggle(cam, live) +
+      (note ? '<div class="cnote-row">' + note.html + "</div>" : "") + "</div>";
   }).join("");
   if (focused !== null) focusCameraSwitch(focused);
+  if (focusedNote !== null) {
+    const details = [...document.querySelectorAll("details.cnote-more")].find((d) => d.dataset.key === focusedNote && d.offsetParent !== null);
+    if (details) details.querySelector("summary").focus();
+  }
 
   // ---- events ----
   const events = (status && Array.isArray(status.Events) && status.Events) || [];
