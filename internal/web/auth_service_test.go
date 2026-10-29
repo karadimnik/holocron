@@ -602,7 +602,7 @@ func TestSessionSurvivesARestartOfTheServer(t *testing.T) {
 	ip, _, _ := parseTLSListen(rig.cfg.TLSListen)
 	names, _ := buildCertNames(ip, nil)
 	users := newFileUserStore(rig.cfg.AuthDir, rig.clock.now)
-	again, err := newTLSHandler(rig.cfg, log, rig.mgr, names, newAuthService(rig.cfg.AuthDir, users, log, rig.clock.now, fastHasher()))
+	again, err := newTLSHandler(rig.cfg, log, rig.certs, names, newAuthService(rig.cfg.AuthDir, users, log, rig.clock.now, fastHasher()))
 	if err != nil {
 		t.Fatal(err)
 	}

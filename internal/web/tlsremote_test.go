@@ -4,6 +4,7 @@ import (
 	"crypto/ecdsa"
 	"crypto/elliptic"
 	"crypto/rand"
+	"crypto/tls"
 	"crypto/x509"
 	"crypto/x509/pkix"
 	"encoding/asn1"
@@ -223,5 +224,228 @@ func TestRemoteCARefusesForgedLeaves(t *testing.T) {
 		if !c.allow && err == nil {
 			t.Errorf("%s: verified, want refused", c.name)
 		}
+	}
+}
+
+func remoteCfg(t *testing.T, host string) Config {
+	t.Helper()
+	return Config{TLSListen: lanListen, TLSDir: filepath.Join(t.TempDir(), "tls"), RemoteHost: host}
+}
+
+func quietLog() *slog.Logger { return slog.New(slog.NewTextHandler(io.Discard, nil)) }
+
+// The handshake's SNI picks the leaf: the remote one for the remote host in any case, the
+// LAN one for everything else.
+func TestSNISelectsTheRemoteLeafOnlyForTheRemoteHost(t *testing.T) {
+	certs, _, _, _, err := prepareCerts(remoteCfg(t, testRemoteHost), quietLog())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if certs.remote == nil {
+		t.Fatal("no remote manager with RemoteHost set")
+	}
+	for _, c := range []struct {
+		sni        string
+		wantRemote bool
+	}{
+		{testRemoteHost, true},
+		{"REMOTE.Example.ORG", true},
+		{"192.168.1.50", false},
+		{"127.0.0.1", false},
+		{"localhost", false},
+		{"", false},
+		{"other.example.org", false},
+		{"cam." + testRemoteHost, false},
+	} {
+		got, err := certs.GetCertificate(&tls.ClientHelloInfo{ServerName: c.sni})
+		if err != nil {
+			t.Fatalf("%q: %v", c.sni, err)
+		}
+		isRemote := slices.Equal(got.Leaf.DNSNames, []string{testRemoteHost})
+		if isRemote != c.wantRemote {
+			t.Errorf("SNI %q: remote leaf %v, want %v (names %v %v)", c.sni, isRemote, c.wantRemote, got.Leaf.DNSNames, got.Leaf.IPAddresses)
+		}
+	}
+	// A real handshake each way, each verified against its own CA only.
+	remoteCA := readCertFile(t, filepath.Join(certs.remote.dir, remoteCACertFile))
+	lanCA := readCertFile(t, filepath.Join(certs.lan.dir, caCertFile))
+	for _, c := range []struct {
+		sni  string
+		ca   *x509.Certificate
+		fail bool
+	}{
+		{testRemoteHost, remoteCA, false},
+		{"192.168.1.50", lanCA, false},
+		{testRemoteHost, lanCA, true},
+		{"192.168.1.50", remoteCA, true},
+	} {
+		roots := x509.NewCertPool()
+		roots.AddCert(c.ca)
+		client, server := net.Pipe()
+		go func() {
+			s := tls.Server(server, serverTLSConfig(certs))
+			_ = s.Handshake()
+			s.Close()
+		}()
+		err := tls.Client(client, &tls.Config{RootCAs: roots, ServerName: c.sni}).Handshake()
+		client.Close()
+		if (err != nil) != c.fail {
+			t.Errorf("handshake for %s against %s: %v (want failure %v)", c.sni, c.ca.Subject.CommonName, err, c.fail)
+		}
+	}
+}
+
+func dirNames(t *testing.T, dir string) []string {
+	t.Helper()
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var names []string
+	for _, e := range entries {
+		names = append(names, e.Name())
+	}
+	return names
+}
+
+// With remoteHost empty nothing about the remote CA exists; turning it on leaves the LAN CA and
+// LAN leaf byte for byte as they were.
+func TestRemoteHostLeavesTheLANCertificatesUnchanged(t *testing.T) {
+	cfg := remoteCfg(t, "")
+	certs, _, _, _, err := prepareCerts(cfg, quietLog())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if certs.remote != nil {
+		t.Error("a remote manager with RemoteHost empty")
+	}
+	if got := dirNames(t, cfg.TLSDir); !slices.Equal(got, []string{caCertFile, caKeyFile, leafCertFile, leafKeyFile}) {
+		t.Errorf("files with remote access off: %v", got)
+	}
+	got, _ := certs.GetCertificate(&tls.ClientHelloInfo{ServerName: testRemoteHost})
+	if len(got.Leaf.DNSNames) != 1 || got.Leaf.DNSNames[0] != "localhost" {
+		t.Errorf("remote access off served %v for the remote name", got.Leaf.DNSNames)
+	}
+	before := map[string][]byte{}
+	for _, f := range []string{caCertFile, leafCertFile} {
+		before[f], _ = os.ReadFile(filepath.Join(cfg.TLSDir, f))
+	}
+	lanSerial := got.Leaf.SerialNumber
+
+	cfg.RemoteHost = testRemoteHost
+	certs, _, lanNote, remoteNote, err := prepareCerts(cfg, quietLog())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if lanNote != "reused" || remoteNote != "created" {
+		t.Errorf("notes: LAN %q remote %q", lanNote, remoteNote)
+	}
+	for f, data := range before {
+		now, _ := os.ReadFile(filepath.Join(cfg.TLSDir, f))
+		if string(now) != string(data) {
+			t.Errorf("%s changed when remote access was turned on", f)
+		}
+	}
+	lan, _ := certs.GetCertificate(&tls.ClientHelloInfo{ServerName: "192.168.1.50"})
+	if lan.Leaf.SerialNumber.Cmp(lanSerial) != 0 || !slices.Equal(lan.Leaf.DNSNames, []string{"localhost"}) || len(lan.Leaf.IPAddresses) != 2 {
+		t.Errorf("LAN leaf changed: serial %v names %v %v", lan.Leaf.SerialNumber, lan.Leaf.DNSNames, lan.Leaf.IPAddresses)
+	}
+
+	// Cleared again: the files stay, nothing serves them.
+	cfg.RemoteHost = ""
+	certs, _, _, _, err = prepareCerts(cfg, quietLog())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(filepath.Join(cfg.TLSDir, remoteCACertFile)); err != nil {
+		t.Errorf("clearing remoteHost removed the remote CA: %v", err)
+	}
+	if got, _ := certs.GetCertificate(&tls.ClientHelloInfo{ServerName: testRemoteHost}); slices.Contains(got.Leaf.DNSNames, testRemoteHost) {
+		t.Error("the remote leaf is still served with remoteHost cleared")
+	}
+}
+
+// The remote leaf is reused, renewed near expiry and reissued when its names differ.
+func TestRemoteLeafRenewal(t *testing.T) {
+	m := testRemoteManager(t, "")
+	clock := time.Now()
+	m.now = func() time.Time { return clock }
+	first, note, err := m.EnsureLeaf(remoteNames())
+	if err != nil || note != "created" {
+		t.Fatalf("%q %v", note, err)
+	}
+	if _, note, _ := m.EnsureLeaf(remoteNames()); note != "reused" {
+		t.Errorf("second start: %q", note)
+	}
+	clock = first.Leaf.NotAfter.Add(-29 * 24 * time.Hour)
+	renewed, note, err := m.EnsureLeaf(remoteNames())
+	if err != nil || note != "renewed (near expiry)" {
+		t.Errorf("29 days before expiry: %q %v", note, err)
+	}
+	if !slices.Equal(renewed.Leaf.DNSNames, []string{testRemoteHost}) {
+		t.Errorf("renewed names %v", renewed.Leaf.DNSNames)
+	}
+	if _, err := m.issueLeaf(readCertFile(t, filepath.Join(m.dir, remoteCACertFile)), mustRemoteKey(t, m), certNames{DNS: []string{"cam." + testRemoteHost}}); err != nil {
+		t.Fatal(err)
+	}
+	if got, note, _ := m.EnsureLeaf(remoteNames()); note != "renewed (the names changed)" || !slices.Equal(got.Leaf.DNSNames, []string{testRemoteHost}) {
+		t.Errorf("a leaf for another name: %q %v", note, got.Leaf.DNSNames)
+	}
+}
+
+func mustRemoteKey(t *testing.T, m *certManager) *ecdsa.PrivateKey {
+	t.Helper()
+	_, key, err := m.EnsureCA()
+	if err != nil {
+		t.Fatal(err)
+	}
+	return key
+}
+
+// A new remoteHost gets a new remote CA: the old CA, its key and its leaf are deleted (the old
+// key can sign nothing more) and the replacement is logged as a warning.
+func TestRemoteHostChangeReplacesTheRemoteCA(t *testing.T) {
+	cfg := remoteCfg(t, testRemoteHost)
+	certs, _, _, _, err := prepareCerts(cfg, quietLog())
+	if err != nil {
+		t.Fatal(err)
+	}
+	old, _ := certs.remote.CAInfo()
+
+	cfg.RemoteHost = "other.example.org"
+	var logs strings.Builder
+	log := slog.New(slog.NewTextHandler(&logs, nil))
+	certs, _, _, note, err := prepareCerts(cfg, log)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if note != "created" {
+		t.Errorf("remote note %q", note)
+	}
+	ca := readCertFile(t, filepath.Join(cfg.TLSDir, remoteCACertFile))
+	if fingerprint(ca) == old.Fingerprint || !slices.Equal(ca.PermittedDNSDomains, []string{"other.example.org"}) {
+		t.Errorf("the remote CA was not replaced: %v", ca.PermittedDNSDomains)
+	}
+	leaf, _ := certs.GetCertificate(&tls.ClientHelloInfo{ServerName: "other.example.org"})
+	if !slices.Equal(leaf.Leaf.DNSNames, []string{"other.example.org"}) {
+		t.Errorf("leaf for the new name: %v", leaf.Leaf.DNSNames)
+	}
+	if got := dirNames(t, cfg.TLSDir); !slices.Equal(got, []string{remoteCACertFile, remoteCAKeyFile, caCertFile, caKeyFile, remoteLeafCertFile, remoteLeafKeyFile, leafCertFile, leafKeyFile}) {
+		t.Errorf("files after the change: %v", got)
+	}
+	if !strings.Contains(logs.String(), "remote CA replaced") || !strings.Contains(logs.String(), "it is for "+testRemoteHost) {
+		t.Errorf("no replacement warning: %s", logs.String())
+	}
+}
+
+// holocron tls rotate starts over with both CAs: the remote files are certificate files too.
+func TestRotateCARemovesTheRemoteCA(t *testing.T) {
+	cfg := remoteCfg(t, testRemoteHost)
+	if _, _, _, _, err := prepareCerts(cfg, quietLog()); err != nil {
+		t.Fatal(err)
+	}
+	removed, left, err := RotateCA(cfg.TLSDir)
+	if err != nil || len(removed) != 8 || len(left) != 0 {
+		t.Errorf("removed %v left %v err %v", removed, left, err)
 	}
 }

@@ -287,7 +287,7 @@ func newTLSRigLogx(t *testing.T, logs *webLogs, mutate func(*Config), opts ...se
 		t.Fatal(err)
 	}
 	auth := newAuthService(cfg.AuthDir, users, logs.For("auth"), clock.now, hasher)
-	h, err := newTLSHandler(cfg, log, mgr, names, auth, append([]serveOpt{withLogs(logs), withController(&fakeCtl{}), withRequestLevel(slog.LevelDebug)}, opts...)...)
+	h, err := newTLSHandler(cfg, log, serverCerts{lan: mgr}, names, auth, append([]serveOpt{withLogs(logs), withController(&fakeCtl{}), withRequestLevel(slog.LevelDebug)}, opts...)...)
 	if err != nil {
 		t.Fatal(err)
 	}

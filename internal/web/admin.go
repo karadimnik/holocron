@@ -275,8 +275,9 @@ func CACertificatePEM(tlsDir string) ([]byte, error) {
 	return pem, nil
 }
 
-// tlsFiles are the files the web role keeps in the TLS folder.
-var tlsFiles = []string{caCertFile, caKeyFile, leafCertFile, leafKeyFile}
+// tlsFiles are the files the web role keeps in the TLS folder: the LAN CA and leaf, and the
+// remote CA and leaf (web.remoteHost).
+var tlsFiles = []string{caCertFile, caKeyFile, leafCertFile, leafKeyFile, remoteCACertFile, remoteCAKeyFile, remoteLeafCertFile, remoteLeafKeyFile}
 
 // RotateCA deletes the CA and server certificate files (and the folder when nothing else is in it),
 // so the next web start creates a fresh CA and leaf. It returns the paths removed. Files it does

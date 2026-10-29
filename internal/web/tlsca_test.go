@@ -332,7 +332,7 @@ func TestServerConfigHandshake(t *testing.T) {
 	if _, err := m.Prepare(lanNames(t)); err != nil {
 		t.Fatal(err)
 	}
-	conf := serverTLSConfig(m)
+	conf := serverTLSConfig(serverCerts{lan: m})
 	if conf.MinVersion != tls.VersionTLS12 {
 		t.Errorf("MinVersion %x", conf.MinVersion)
 	}
