@@ -146,6 +146,7 @@ Update this file in the same push as each merge: `git log --first-parent --merge
 | 1d3e191 | 2026-10-28 | Merge Holocron R12: Dashboard redesign (status summary, no Start/Stop row, record Undo), Admin > System with Reload and typed-confirmation Stop, stopped panel, 390 px and contrast fixes; page named Holocron |  |
 | 45562f7 | 2026-10-29 | Merge Holocron B7: doctor segment-rate check uses the last 24 h (sunrise and sunset ramps no longer warn; empty segments warn as no data and never enter a baseline) |  |
 | 78662c4 | 2026-10-29 | Merge Holocron B8: a camera's last error is put into words on the Dashboard (what, when, handled); the chip says Unstable only from 3 restarts in the hour; a switched-off camera's old note is quiet |  |
+| 7749c8a | 2026-10-29 | Merge Holocron B9: the running version in the web footer, an About block and a stale-page notice, and on the first line of status, doctor and help |  |
 
 ## Releases
 
