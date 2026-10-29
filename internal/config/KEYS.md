@@ -49,7 +49,7 @@ Types are strict: a JSON string is never accepted for a boolean or a number (Pow
 | LiveWhepAddress | `127.0.0.1:8889` | `127.0.0.1:<1-65535>`; not the relay's host:port | live view | no |
 | LiveUdpAddress | `127.0.0.1:8189` | `127.0.0.1`, `0.0.0.0` or one private IPv4, port 1-65535 | live view | yes |
 | LiveAdvertiseHosts | `[]` | <= 4 unique private IPv4 literals; consistency with LiveUdpAddress | live view | yes |
-| LiveAdvertiseRemoteHost | false | JSON boolean; true needs web.remoteHost and a LiveUdpAddress beyond loopback (`0.0.0.0` or a private IPv4) | NEW: also offers web.remoteHost to browsers for video (MediaMTX resolves the name at each session), so a viewer outside the home network can receive it | yes |
+| LiveAdvertiseRemoteHost | false | JSON boolean; true needs web.remoteHost and a LiveUdpAddress beyond loopback (`0.0.0.0` or a private IPv4) | NEW: also offers web.remoteHost to browsers for video (MediaMTX resolves the name at each session), so a viewer outside the home network can receive it; [docs/ui.md](../../docs/ui.md#live-video-from-outside-the-home-network) | yes |
 | LiveSubStream | `stream2` | `^[A-Za-z0-9_-]{1,32}$` | live view | yes |
 | LiveCloseAfterSeconds | 10 | whole number 1-3600 | live view | yes |
 | logging.level | `info` | ERROR, WARN, INFO, DEBUG or TRACE (any case) | NEW in holocron (LLD 2.13): the default level | yes |

@@ -179,7 +179,7 @@ At most 24 live sessions at a time and 6 per camera; more is 429.
 
 ## Live view on the LAN: media, firewall and stuck tiles
 
-**A tile that is not playing says why**, in plain words: the signalling answer, the ICE and connection state, how many candidates the browser and the server offered and of what class (loopback, private, ...), and "No media after 15 s". Only counts and classes are shown, never an address. **Copy diagnostics** puts one `live-diag/3` line on the clipboard to paste into a bug report. From a terminal, `holocron doctor --group live` checks the live side.
+**A tile that is not playing says why**, in plain words: the signalling answer, the ICE and connection state, how many candidates the browser and the server offered and of what class (loopback, private, public, ...), and "No media after 15 s". Only counts and classes are shown, never an address. **Copy diagnostics** puts one `live-diag/3` line on the clipboard to paste into a bug report. From a terminal, `holocron doctor --group live` checks the live side.
 
 **Media on a LAN address.** The page and signalling stay on the web app's addresses, but the video travels over UDP between the relay and the browser. For a browser on another device, `LiveUdpAddress` (default `127.0.0.1:8189`) must be `0.0.0.0:<port>` or this PC's private IPv4 and port, and `LiveAdvertiseHosts` must list the private IPv4 address(es) the browser should use (at most 4; rules in [`internal/config/KEYS.md`](../internal/config/KEYS.md); restart needed). Prose: [configuration.md](configuration.md).
 
@@ -273,7 +273,7 @@ Off by default. Setting `web.remoteHost` in `holocron.config.json` to the public
 **What a remote request gets** (all in `internal/web/remote.go` and the session gate):
 
 - Its Host must be `web.remoteHost` (any case, any port); a public peer naming the LAN address or anything else gets 403.
-- Its effective role is **viewer** whatever the account: admin routes answer 403, the Admin and Settings tabs do not appear, and the view-only allow-list applies even with `-tls-readonly false`. It sees Dashboard, Live, Footage and Phone like a viewer on the LAN; live video does not play from outside (below).
+- Its effective role is **viewer** whatever the account: admin routes answer 403, the Admin and Settings tabs do not appear, and the view-only allow-list applies even with `-tls-readonly false`. It sees Dashboard, Live, Footage and Phone like a viewer on the LAN; live video plays from outside only once it is set up ([Live video from outside the home network](#live-video-from-outside-the-home-network)).
 - Sign-in: the LAN limits stay (10 attempts a minute per address with 5 banked, and the per-name lockout of [Signing in on the LAN](#signing-in-on-the-lan-users-sessions-and-brute-force-protection)), plus a stricter remote bucket of **2 attempts a minute per address, 3 banked**; an IPv6 `/64` counts as one address. Three quick tries cover a mistyped password; after that one address gets one guess every 30 seconds.
 - Sessions from outside end after **12 hours without use or 7 days** after sign-in, whichever comes first (LAN: 7 days idle, 30 days). A LAN session that a phone carries outside is held to the same remote limits.
 - Answers carry `Strict-Transport-Security: max-age=86400` (no `includeSubDomains`, no `preload`), `Referrer-Policy: no-referrer`, `X-Content-Type-Options: nosniff` and, on the API, `Cache-Control: no-store`. The cookie is `Secure`, `HttpOnly`, `SameSite=Strict`.
@@ -290,7 +290,7 @@ Off by default. Setting `web.remoteHost` in `holocron.config.json` to the public
 
 Lifetime rules checked on 29 Oct 2026: Apple's limit of 398 days applies only to certificates from roots preinstalled in its systems and "will not affect certificates issued from user-added or administrator-added Root CAs" (support.apple.com/en-us/102028, CONFIRMED by reading it). The CA/Browser Forum maximum for public certificates is 200 days from 15 March 2026; whether Apple applies it or other limits to user-added roots is UNVERIFIED, and field reports show iOS refusing private certificates valid for years; 199 days stays inside every one of these limits. Whether iOS enforces the e-mail and URI parts of the name constraint is UNVERIFIED (Go, curl/OpenSSL and the tests do).
 
-**Live video is not part of this release.** It needs a separate media port for WebRTC and comes in a later task; remotely the Live tab does not play.
+**Live video** needs a separate UDP media port and the opt-in `LiveAdvertiseRemoteHost`: [Live video from outside the home network](#live-video-from-outside-the-home-network). Without it the Live tab does not play from outside.
 
 **Setting it up.**
 
@@ -298,12 +298,58 @@ Lifetime rules checked on 29 Oct 2026: Apple's limit of 398 days applies only to
 2. Create a dedicated viewer account with a long password: `holocron user add NAME --role viewer` (the password is read from standard input). An admin signing in from outside is capped to viewer anyway; without any viewer account `holocron doctor` warns.
 3. Set `web.tlsListen` (for example `192.168.1.50:8443`) and `web.remoteHost` (for example `remote.example.org`) in `holocron.config.json`, then `holocron config validate` and `holocron restart --detach`.
 4. With the phone on the home Wi-Fi, install the remote CA from the Phone tab and compare its fingerprint with `holocron tls ca --remote` (see the certificate above).
-5. On the router, forward **one** TCP port of your choice (for example WAN 48443) to the `web.tlsListen` address and port. Do **not** forward 8787 (the loopback page) or any media port.
+5. On the router, forward **one** TCP port of your choice (for example WAN 48443) to the `web.tlsListen` address and port. Do **not** forward 8787 (the loopback page). The media UDP port is forwarded only for [live video from outside](#live-video-from-outside-the-home-network).
 6. `holocron status` shows `remote access: on (viewer-only) for remote.example.org`; `holocron doctor --group web` lists the policy, the accounts, the remote CA and its fingerprint, the remote server certificate and, when 20 or more remote sign-ins failed or were locked in 24 hours, the counts and the top three addresses.
 
 To switch it off, remove `web.remoteHost`, restart, and delete the router's port-forward.
 
 **The alternative: a VPN.** A VPN into the home network (WireGuard on the router, or a mesh VPN such as Tailscale) exposes no sign-in page to the internet at all: the phone joins the LAN and uses the normal LAN address, the CA it already trusts, and live video works as at home. It is the safer choice when the router or the phone supports it; remote access is for when it does not.
+
+## Live video from outside the home network
+
+Off by default; it builds on [remote access](#reaching-holocron-from-outside-the-home-network), which must already work (page, sign-in, remote CA). The page and the signalling travel through the HTTPS port as before; the **video** travels over UDP directly between the live instance and the phone. A phone outside the home therefore needs two things the LAN never did:
+
+1. **A public address in the server's answer.** With `LiveAdvertiseRemoteHost: true` the live instance also offers `web.remoteHost` (the dynamic-DNS name) to browsers, on the media port of `LiveUdpAddress`. MediaMTX v1.21.2 looks the name up **at every session** (its `webrtcAdditionalHosts`; a name that does not resolve is skipped with a warning in the live log), so a new public IP needs no restart. Holocron itself never looks the name up, except `holocron doctor --deep`.
+2. **A router rule for the media port**, besides the one for the web port:
+
+| What to forward on the router | Protocol | External port | To (this PC) |
+| --- | --- | --- | --- |
+| web page and sign-in | TCP | any you choose, for example 48443 | the `web.tlsListen` address and port, for example `192.168.1.50:8443` |
+| live video media | UDP | **the same number as the `LiveUdpAddress` port**, for example 8189 | this PC's LAN address, port of `LiveUdpAddress`, for example `192.168.1.50:8189` |
+
+The external media port must equal the internal one: the address offered to the phone carries the `LiveUdpAddress` port, so the phone sends to that port of the public address.
+
+**Configuration** (`holocron.config.json`; `LiveAdvertiseRemoteHost` is also editable with `holocron config set` and the Admin tab, and is refused unless both conditions hold):
+
+```json
+"LiveViewEnabled": true,
+"LiveUdpAddress": "0.0.0.0:8189",
+"LiveAdvertiseHosts": ["192.168.1.50"],
+"LiveAdvertiseRemoteHost": true,
+"web": { "tlsListen": "192.168.1.50:8443", "remoteHost": "remote.example.org" }
+```
+
+It needs `web.remoteHost` and a `LiveUdpAddress` beyond loopback (`0.0.0.0:<port>` or this PC's private IPv4 and port: a router cannot forward to `127.0.0.1`), which in turn needs `LiveAdvertiseHosts` ([Live view on the LAN](#live-view-on-the-lan-media-firewall-and-stuck-tiles)). Then `holocron config validate` and `holocron restart --detach` (the live configuration is written at start).
+
+**Windows Firewall** (Holocron applies none; documented-only, `UNVERIFIED` on any machine in this review). The LAN rule above allows the media port from `LocalSubnet` only, so a phone outside is dropped. Add a second rule for the same program and port from any address (the PC's home network stays the Private profile, so `-Profile Private` is right), from an elevated PowerShell, adjusting the program path and port:
+
+```powershell
+New-NetFirewallRule -DisplayName 'Holocron live view media from outside (UDP 8189)' -Direction Inbound -Action Allow -Protocol UDP -LocalPort 8189 -Program 'C:\mediamtx\mediamtx.exe' -Profile Private -RemoteAddress Any
+Remove-NetFirewallRule -DisplayName 'Holocron live view media from outside (UDP 8189)'   # to take it away again
+```
+
+**What the viewer sees.** The Live tab plays as on the LAN. A tile that does not connect says why; for a session from outside it says either "No public address offered for this outside connection. Run holocron doctor --deep on the PC (live.remote)." (the setting is off, or the name did not resolve on the PC) or "A public address was offered, but no video came. Check the router's UDP forward, the firewall and this network's UDP." (the address was offered and nothing arrived). **Copy diagnostics** shows `answer=[... public ...]` when the public address was offered.
+
+**Checking it.** `holocron doctor --group live` has a `live.remote` line: a warning with the exact setting while remote access is on and the video is not offered, otherwise the router rule to make (UDP, external port equal to the `LiveUdpAddress` port, to this PC) and the firewall need. It cannot see the router and never says the rule exists. `holocron doctor --group live --deep` also resolves `web.remoteHost` on this PC (2 s) and prints the addresses, with a warning when it does not resolve or resolves to no public address (for example a router that answers its own DNS name with the LAN address).
+
+**Limits.**
+
+- The phone's network must let UDP out. There is **no TCP fallback and no TURN relay** in this release, so networks that block UDP (some corporate, hotel or guest Wi-Fi) get the page but no video; mobile data normally allows UDP.
+- After the home's public IP changes, the new address is offered once the name resolves to it on this PC: the dynamic-DNS update plus the Windows DNS cache (the record's TTL) can delay that. How long is `UNVERIFIED`.
+- A home behind carrier-grade NAT (no public IPv4 of its own) cannot forward ports, so neither the page nor the video can be reached from outside; a VPN is the way there.
+- Privacy: no third-party server takes part. The phone learns the home's public address, which it already used to open the page.
+
+To switch it off, set `LiveAdvertiseRemoteHost` to false, restart, and delete the router's UDP rule and the firewall rule.
 
 ## The Admin tab
 
