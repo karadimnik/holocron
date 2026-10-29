@@ -20,6 +20,10 @@ A version is `MAJOR.MINOR.PATCH`, tagged `vMAJOR.MINOR.PATCH`. The public interf
 
 ## [Unreleased]
 
+### Changed
+
+- Web app: a camera's last error on the Dashboard is put into words, with the time and whether it is handled ("At 12:03 the camera stream ended after 4 h 40 min. Restarted automatically; recording resumed." instead of "ffmpeg exited with code 0 after 16827s"), as a calm note while the camera records and an error while it does not; the original text stays in the tooltip and under Details, and a note older than 24 h moves under Details.
+
 ## [1.1.1] - 2026-10-29
 
 ### Fixed

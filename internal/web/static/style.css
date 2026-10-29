@@ -91,6 +91,14 @@ tr:hover td{background:#1e1e1c}
 .cam-meta{color:var(--ink-3);font-size:12px;margin-top:2px}
 .num{font-variant-numeric:tabular-nums;color:var(--ink-2)}
 .err{color:#f09a9a;font-size:12px;font-family:var(--mono);max-width:34ch;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+/* camera note (cameraNote): the last error in words, an icon AND words; calm while the camera records */
+.cnote{display:flex;align-items:flex-start;gap:6px;margin-top:3px;max-width:52ch;color:var(--ink-3);font-size:12px;line-height:1.4;white-space:normal}
+.cnote svg{flex:none;margin-top:1px}
+.cnote.bad{color:#f09a9a}
+.cnote-more{font-size:12px;color:var(--ink-3);white-space:normal;max-width:52ch}
+.cnote-more summary{width:max-content;min-height:24px;line-height:24px;cursor:pointer}
+.cnote-more p{margin:0 0 2px}
+.cnote-more code{display:block;font-family:var(--mono);color:var(--ink-2);overflow-wrap:anywhere}
 
 /* record toggle */
 .tgl{position:relative;width:40px;height:22px;border-radius:12px;background:#3a3a37;border:0;padding:0;flex:none}
@@ -103,11 +111,12 @@ tr:hover td{background:#1e1e1c}
 
 /* ---- layout C: compact rows ---- */
 .clist{background:var(--surface-1);border:1px solid var(--line-soft);border-radius:var(--r);overflow:hidden}
-.crow{display:flex;align-items:center;gap:12px;padding:13px var(--pad);border-bottom:1px solid var(--line-soft)}
+.crow{display:flex;flex-wrap:wrap;align-items:center;gap:2px 12px;padding:13px var(--pad);border-bottom:1px solid var(--line-soft)}
 .crow:last-child{border-bottom:0}
 .crow .main{flex:1;min-width:0}
 .crow .nm{font-weight:500}
 .crow .sb{color:var(--ink-3);font-size:12px;margin-top:2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.crow .cnote-row{flex:1 1 100%;min-width:0}
 
 /* layout A above the phone breakpoint, layout C below it */
 #camsC{display:none}

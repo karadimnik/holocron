@@ -342,6 +342,112 @@ func TestDashboardShowsStateNotCommands(t *testing.T) {
 	}
 }
 
+// A camera's LastError is put into words (B8, D24): app.js's CAMERA_ERRORS must match the texts the
+// supervisor really writes (its format strings are read from internal/supervise, so a change there
+// fails here), an unknown text matches nothing and is shown as it is, the note keeps the raw text
+// in its tooltip and under Details, is no live region, and the status summary does not look at it.
+func TestCameraNoteWording(t *testing.T) {
+	formats := map[string]string{
+		"account.go": `"ffmpeg exited with code %d after %ds"`,
+		"plan.go":    `"stalled, no segment write for %ds (limit %ds) while the process was alive"`,
+	}
+	for file, format := range formats {
+		src, err := os.ReadFile(filepath.Join("..", "supervise", file))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !strings.Contains(string(src), format) {
+			t.Errorf("internal/supervise/%s no longer writes %s: update CAMERA_ERRORS in app.js", file, format)
+		}
+	}
+	if src, err := os.ReadFile(filepath.Join("..", "supervise", "account.go")); err != nil || !strings.Contains(string(src), `e.lastError = "failed to start: " + err.Error()`) {
+		t.Errorf("internal/supervise/account.go no longer writes \"failed to start: \" (%v): update CAMERA_ERRORS in app.js", err)
+	}
+
+	appJS, err := staticFiles.ReadFile("static/app.js")
+	if err != nil {
+		t.Fatal(err)
+	}
+	app := string(appJS)
+	table := regexp.MustCompile(`(?s)\nconst CAMERA_ERRORS = \[\n(.*?)\n\];\n`).FindStringSubmatch(app)
+	if table == nil {
+		t.Fatal("no CAMERA_ERRORS in app.js")
+	}
+	var patterns []*regexp.Regexp
+	for _, m := range regexp.MustCompile(`(?m)^  \[/(.+?)/, \(m?\) => "`).FindAllStringSubmatch(table[1], -1) {
+		patterns = append(patterns, regexp.MustCompile(m[1]))
+	}
+	if len(patterns) != 4 {
+		t.Fatalf("CAMERA_ERRORS has %d entries the test can read, want 4:\n%s", len(patterns), table[1])
+	}
+	first := func(message string) int {
+		for i, p := range patterns {
+			if p.MatchString(message) {
+				return i
+			}
+		}
+		return -1
+	}
+	for _, c := range []struct {
+		message string
+		want    int
+	}{
+		{fmt.Sprintf("ffmpeg exited with code %d after %ds", 0, 16827), 0},
+		{fmt.Sprintf("ffmpeg exited with code %d after %ds", 1, 95), 1},
+		{fmt.Sprintf("ffmpeg exited with code %d after %ds", -1, 0), 1},
+		{fmt.Sprintf("ffmpeg exited with code %d after %ds", 3221225786, 7200), 1},
+		{fmt.Sprintf("stalled, no segment write for %ds (limit %ds) while the process was alive", 1950, 1800), 2},
+		{"failed to start: exec: \"ffmpeg\": executable file not found in $PATH", 3},
+		{"rtsp: connection refused (192.168.1.50)", -1},
+		{"ffmpeg exited with code 0 after 16827s and more", -1},
+	} {
+		if got := first(c.message); got != c.want {
+			t.Errorf("%q matches CAMERA_ERRORS entry %d, want %d", c.message, got, c.want)
+		}
+	}
+
+	for _, want := range []string{
+		`(m) => "the camera stream ended after " + duration(+m[1])`,
+		`(m) => "the recorder stopped unexpectedly (exit code " + m[1] + ") after " + duration(+m[2])`,
+		`let words = "the recorder reported: " + message;`,
+		`(alive ? "Restarted automatically; recording resumed." : "Not recording now.")`,
+		`const NOTE_VISIBLE_MS = 24 * 3600 * 1000;`,
+		`const quiet = alive && at !== null && now - at.getTime() > NOTE_VISIBLE_MS;`,
+		`'<div class="cnote' + (alive ? "" : " bad") + '" title="' + esc(raw) + '">`,
+		`"><summary>Details</summary>" + (quiet ? "<p>" + esc(sentence) + "</p>" : "") + "<code>" + esc(raw) + "</code></details>"`,
+	} {
+		if !strings.Contains(app, want) {
+			t.Errorf("app.js has no %s", want)
+		}
+	}
+	note := regexp.MustCompile(`(?s)\nfunction cameraNote\(cam, open\) \{(.*?)\n\}\n`).FindStringSubmatch(app)
+	if note == nil {
+		t.Fatal("no cameraNote in app.js")
+	}
+	for _, gone := range []string{"aria-live", `role="status"`, `role="alert"`} {
+		if strings.Contains(note[1], gone) {
+			t.Errorf("the camera note is a live region (%s): it would be read out on every poll", gone)
+		}
+	}
+	if !strings.Contains(note[1], `aria-hidden="true"`) {
+		t.Error("the camera note's icon is not hidden from screen readers (the words carry the meaning)")
+	}
+	for _, use := range []string{"const note = cameraNote(cam, open);", "cameraDetail(cam, live, openNotes)", "? cameraNote(cam, openNotes) : null;"} {
+		if !strings.Contains(app, use) {
+			t.Errorf("app.js has no %s: both the table and the compact rows show the note", use)
+		}
+	}
+	summary := regexp.MustCompile(`(?s)// ---- summary: the verdict, then what needs attention ----(.*?)renderSummary\(summary\);`).FindStringSubmatch(app)
+	if summary == nil {
+		t.Fatal("no status summary in render")
+	}
+	for _, gone := range []string{"LastError", "RestartsLastHour"} {
+		if strings.Contains(summary[1], gone) {
+			t.Errorf("the status summary looks at %s: a restart the supervisor recovered from is not a problem", gone)
+		}
+	}
+}
+
 // Switching a camera off asks nothing and offers Undo (D24): toggleRecord holds no confirmation, the
 // Undo calls the same endpoint to switch it back on, and the toast region is a polite live region.
 func TestRecordSwitchOffOffersUndo(t *testing.T) {
