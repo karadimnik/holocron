@@ -30,14 +30,19 @@ func serverTLSConfig(m *certManager) *tls.Config {
 }
 
 // tlsGuardConfig is the Config the guard sees for the LAN listener: its own
-// address and certificate names are the allowed Hosts, and the loopback
-// listener's AllowedHosts are NOT carried over.
+// address, its certificate names and the remote access name (RemoteHost, when
+// set) are the allowed Hosts, and the loopback listener's AllowedHosts are NOT
+// carried over. RemoteHost is not a certificate name: the local CA is
+// name-constrained to private names and cannot vouch for a public one.
 func tlsGuardConfig(cfg Config, names certNames) Config {
 	guard := Config{Listen: cfg.TLSListen}
 	for _, ip := range names.IPs {
 		guard.AllowedHosts = append(guard.AllowedHosts, ip.String())
 	}
 	guard.AllowedHosts = append(guard.AllowedHosts, names.DNS...)
+	if cfg.RemoteHost != "" {
+		guard.AllowedHosts = append(guard.AllowedHosts, cfg.RemoteHost)
+	}
 	return guard
 }
 
