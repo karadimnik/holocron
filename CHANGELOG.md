@@ -20,6 +20,10 @@ A version is `MAJOR.MINOR.PATCH`, tagged `vMAJOR.MINOR.PATCH`. The public interf
 
 ## [Unreleased]
 
+### Added
+
+- Remote access, off by default: `web.remoteHost` lets the HTTPS login listener answer to one public DNS name; requests from public peer addresses are viewer-only, with a stricter sign-in limit, shorter sessions, HSTS, a `web.remote` doctor check and a `holocron status` line ([docs/ui.md](docs/ui.md#reaching-holocron-from-outside-the-home-network)). The server certificate does not yet name the public host.
+
 ## [1.2.0] - 2026-10-29
 
 ### Added

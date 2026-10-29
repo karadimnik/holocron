@@ -49,6 +49,17 @@ re-read from `users.json` on every request. The loopback listener and the token 
 `roRoutes` against no session, viewer, admin, view-only viewer and admin, loopback, token), `TestRoleGateSeesThroughPathTricks`,
 `TestDemotionTakesEffectOnTheNextRequest`.
 
+## Remote access (`remote.go`)
+
+With `Config.RemoteHost` set (only from `web.remoteHost` in holocron.config.json, `json:"-"`), the HTTPS listener's Host
+allowlist adds that name, and `authService.gate` treats a request whose TCP peer is public (`PeerIsRemote`: not loopback,
+RFC 1918, ULA, link-local, CGNAT, unspecified; unparsable is remote; no forwarding header is read) as remote: its Host must be
+RemoteHost, its effective role is viewer, the view-only allow-list applies whatever `TLSReadOnly` says, its session is held to
+`remoteSession` (12 h idle, 7 days), its sign-in takes the extra `remoteLimiter` bucket (2 a minute, 3 banked, IPv6 by /64),
+and `remoteHeaders` adds HSTS (one day), nosniff and API no-store. The certificate does not carry RemoteHost (the CA is
+name-constrained). `RemotePolicy`, `UserRoles` and `ReadSignInFailures` feed `holocron doctor`'s `web.remote`. Tests:
+`remote_test.go`. Guide: [docs/ui.md](../../docs/ui.md#reaching-holocron-from-outside-the-home-network).
+
 ## The Admin tab (`admin_api.go`, `static/admin.js`)
 
 `/api/admin/*`, each a `web.admin.*` Action through `handleAction` (GETs too, so reads leave records; `Audit` for changes and for
