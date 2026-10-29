@@ -80,7 +80,7 @@
       <p><code id="aTlsFp" class="abreak"></code></p>
       <div class="actions"><a class="btn" id="aTlsDownload" href="api/admin/tls/ca.crt" download="ipcctv-local-ca.crt">Download the CA certificate</a></div>
       <p class="hint">The file is the CA certificate only; its key never leaves the PC. Install it once on each device and check the fingerprint above first.
-        iPhone: open the file, install it under Settings &gt; General &gt; VPN &amp; Device Management, then turn it on under Settings &gt; General &gt; About &gt; Certificate Trust Settings.
+        iPhone (not tested with Holocron): open the file, install it under Settings &gt; General &gt; VPN &amp; Device Management, then turn it on under Settings &gt; General &gt; About &gt; Certificate Trust Settings.
         Android: Settings &gt; Security &gt; Install a certificate &gt; CA certificate. Windows: double-click &gt; Install &gt; Trusted Root Certification Authorities.</p>
       <form id="aRotate" class="aform" autocomplete="off">
         <div class="field"><label for="aRotateWord">Rotate: type ROTATE to confirm</label><input id="aRotateWord" autocomplete="off" spellcheck="false">
