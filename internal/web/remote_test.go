@@ -15,7 +15,8 @@ const remoteName = "remote.example.org"
 func withRemote(c *Config) { c.RemoteHost = remoteName }
 
 // The HTTPS listener answers to the remote access name (any case, any port) only while RemoteHost
-// is set, and the server certificate's names do not change: the CA cannot vouch for a public name.
+// is set, and the LAN certificate's names do not change: the remote name has its own CA and leaf
+// (tlsremote_test.go).
 func TestRemoteHostIsAllowedOnlyWhenSet(t *testing.T) {
 	for _, host := range []string{remoteName, remoteName + ":8443", "REMOTE.Example.Org:443"} {
 		on := newTLSRig(t, withRemote).do(tlsReq{path: "/login", host: host})

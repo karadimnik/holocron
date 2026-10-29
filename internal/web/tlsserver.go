@@ -19,12 +19,51 @@ import (
 // included, except the login page and what it needs.
 // ---------------------------------------------------------------------------
 
+// serverCerts are the listener's certificates: the LAN leaf, and the remote leaf while
+// web.remoteHost is set (remote is nil otherwise).
+type serverCerts struct {
+	lan, remote *certManager
+}
+
+// GetCertificate serves the remote leaf exactly when the client asks for the remote host by SNI
+// (case-insensitive) and the LAN leaf for everything else: an address, localhost, another name,
+// no SNI at all.
+func (c serverCerts) GetCertificate(hello *tls.ClientHelloInfo) (*tls.Certificate, error) {
+	if c.remote != nil && strings.EqualFold(hello.ServerName, c.remote.remoteHost) {
+		return c.remote.GetCertificate(hello)
+	}
+	return c.lan.GetCertificate(hello)
+}
+
+// prepareCerts loads or creates the LAN leaf for the TLSListen address and TLSHosts and, with
+// RemoteHost set, the remote CA and its leaf for that one name. The notes say what happened.
+func prepareCerts(cfg Config, log *slog.Logger) (certs serverCerts, names certNames, lanNote, remoteNote string, err error) {
+	ip, _, err := parseTLSListen(cfg.TLSListen)
+	if err != nil {
+		return serverCerts{}, certNames{}, "", "", err
+	}
+	if names, err = buildCertNames(ip, cfg.TLSHosts); err != nil {
+		return serverCerts{}, certNames{}, "", "", err
+	}
+	certs.lan = newCertManager(cfg.TLSDir, log)
+	if lanNote, err = certs.lan.Prepare(names); err != nil {
+		return serverCerts{}, certNames{}, "", "", fmt.Errorf("TLS certificate: %w", err)
+	}
+	if cfg.RemoteHost != "" {
+		certs.remote = newRemoteCertManager(cfg.TLSDir, cfg.RemoteHost, log)
+		if remoteNote, err = certs.remote.Prepare(certNames{DNS: []string{cfg.RemoteHost}}); err != nil {
+			return serverCerts{}, certNames{}, "", "", fmt.Errorf("remote TLS certificate: %w", err)
+		}
+	}
+	return certs, names, lanNote, remoteNote, nil
+}
+
 // serverTLSConfig is the TLS side: TLS 1.2 at the very least (Go negotiates 1.3
-// with any current client), the certificate from the manager, HTTP/2 and HTTP/1.1.
-func serverTLSConfig(m *certManager) *tls.Config {
+// with any current client), the certificate chosen by SNI, HTTP/2 and HTTP/1.1.
+func serverTLSConfig(certs serverCerts) *tls.Config {
 	return &tls.Config{
 		MinVersion:     tls.VersionTLS12,
-		GetCertificate: m.GetCertificate,
+		GetCertificate: certs.GetCertificate,
 		NextProtos:     []string{"h2", "http/1.1"},
 	}
 }
@@ -32,8 +71,8 @@ func serverTLSConfig(m *certManager) *tls.Config {
 // tlsGuardConfig is the Config the guard sees for the LAN listener: its own
 // address, its certificate names and the remote access name (RemoteHost, when
 // set) are the allowed Hosts, and the loopback listener's AllowedHosts are NOT
-// carried over. RemoteHost is not a certificate name: the local CA is
-// name-constrained to private names and cannot vouch for a public one.
+// carried over. RemoteHost is not a name of the LAN certificate: the remote CA's
+// leaf carries it (serverCerts).
 func tlsGuardConfig(cfg Config, names certNames) Config {
 	guard := Config{Listen: cfg.TLSListen}
 	for _, ip := range names.IPs {
@@ -51,7 +90,7 @@ func tlsGuardConfig(cfg Config, names certNames) Config {
 // session), the view-only gate, the guard (https origins only), then the mux with
 // the TLS-only routes. The login POST passes the guard like any other API call,
 // so a cross-site login attempt is refused before a password is looked at.
-func newTLSHandler(cfg Config, log *slog.Logger, mgr *certManager, names certNames, auth *authService, opts ...serveOpt) (http.Handler, error) {
+func newTLSHandler(cfg Config, log *slog.Logger, certs serverCerts, names certNames, auth *authService, opts ...serveOpt) (http.Handler, error) {
 	opts = append(opts, withAuth(auth))
 	env := newServeEnv(opts)
 	mux, err := buildMux(cfg, log, opts...)
@@ -63,29 +102,72 @@ func newTLSHandler(cfg Config, log *slog.Logger, mgr *certManager, names certNam
 	}
 	auth.remoteHost = cfg.RemoteHost
 	auth.routes(mux)
+	// The CA files and their fingerprints are for LAN and loopback peers only: a remote peer gets
+	// the 404 of a route that does not exist. A CA fetched over the public name could be an
+	// attacker's (trust on first use), so a phone installs the remote CA on the home network.
+	lanOnly := func(w http.ResponseWriter, r *http.Request) bool {
+		if auth.remote(r) {
+			log.Warn("certificate authority refused to a remote peer", "path", r.URL.Path, "ip", sourceIP(r))
+			http.NotFound(w, r)
+			return false
+		}
+		return true
+	}
 	mux.HandleFunc("GET /api/tls/ca.crt", func(w http.ResponseWriter, r *http.Request) {
+		if !lanOnly(w, r) {
+			return
+		}
+		mgr, file := certs.lan, "ipcctv-local-ca.crt"
+		switch r.URL.Query().Get("ca") {
+		case "":
+		case "remote":
+			if certs.remote == nil {
+				http.NotFound(w, r)
+				return
+			}
+			mgr, file = certs.remote, "holocron-remote-ca.crt"
+		default:
+			http.NotFound(w, r)
+			return
+		}
 		data, err := mgr.CACertPEM()
 		if err != nil {
 			writeAPIError(w, http.StatusInternalServerError, "the certificate authority is not available")
 			return
 		}
 		w.Header().Set("Content-Type", "application/x-x509-ca-cert")
-		w.Header().Set("Content-Disposition", `attachment; filename="ipcctv-local-ca.crt"`)
+		w.Header().Set("Content-Disposition", `attachment; filename="`+file+`"`)
 		_, _ = w.Write(data)
 	})
 	mux.HandleFunc("GET /api/tls/info", func(w http.ResponseWriter, r *http.Request) {
-		info, err := mgr.CAInfo()
+		if !lanOnly(w, r) {
+			return
+		}
+		info, err := certs.lan.CAInfo()
 		if err != nil {
 			writeAPIError(w, http.StatusInternalServerError, "the certificate authority is not available")
 			return
 		}
-		writeJSON(w, http.StatusOK, map[string]any{
+		out := map[string]any{
 			"caFingerprintSha256": info.Fingerprint,
 			"caSubject":           info.Subject,
 			"caNotAfter":          info.NotAfter.Format("2006-01-02"),
 			"download":            "api/tls/ca.crt",
 			"readOnly":            cfg.TLSReadOnlyEffective(),
-		})
+		}
+		if certs.remote != nil {
+			remote, err := certs.remote.CAInfo()
+			if err != nil {
+				writeAPIError(w, http.StatusInternalServerError, "the remote certificate authority is not available")
+				return
+			}
+			out["remoteHost"] = certs.remote.remoteHost
+			out["remoteCaFingerprintSha256"] = remote.Fingerprint
+			out["remoteCaSubject"] = remote.Subject
+			out["remoteCaNotAfter"] = remote.NotAfter.Format("2006-01-02")
+			out["remoteDownload"] = "api/tls/ca.crt?ca=remote"
+		}
+		writeJSON(w, http.StatusOK, out)
 	})
 	chain := newGuardScheme(tlsGuardConfig(cfg, names), log, "https")(mux)
 	if cfg.TLSReadOnlyEffective() {
@@ -106,25 +188,16 @@ func startTLS(cfg Config, log *slog.Logger, opts ...serveOpt) (*http.Server, fun
 	if cfg.TLSListen == "" {
 		return nil, nil, nil
 	}
-	ip, _, err := parseTLSListen(cfg.TLSListen)
+	certs, names, note, remoteNote, err := prepareCerts(cfg, log)
 	if err != nil {
 		return nil, nil, err
-	}
-	names, err := buildCertNames(ip, cfg.TLSHosts)
-	if err != nil {
-		return nil, nil, err
-	}
-	mgr := newCertManager(cfg.TLSDir, log)
-	note, err := mgr.Prepare(names)
-	if err != nil {
-		return nil, nil, fmt.Errorf("TLS certificate: %w", err)
 	}
 	clearUnlockMarkers(cfg.AuthDir)
 	auth := newServeEnv(opts).auth
 	if auth == nil {
 		auth = newAuthService(cfg.AuthDir, newFileUserStore(cfg.AuthDir, time.Now), log, time.Now, defaultPasswordHasher)
 	}
-	handler, err := newTLSHandler(cfg, log, mgr, names, auth, opts...)
+	handler, err := newTLSHandler(cfg, log, certs, names, auth, opts...)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -134,16 +207,18 @@ func startTLS(cfg Config, log *slog.Logger, opts ...serveOpt) (*http.Server, fun
 	}
 	server := &http.Server{
 		Handler:           handler,
-		TLSConfig:         serverTLSConfig(mgr),
+		TLSConfig:         serverTLSConfig(certs),
 		ReadHeaderTimeout: 10 * time.Second,
 		IdleTimeout:       120 * time.Second,
 		ErrorLog:          slog.NewLogLogger(log.Handler(), slog.LevelDebug),
 	}
-	info, _ := mgr.CAInfo()
+	info, _ := certs.lan.CAInfo()
 	log.Info("camui listening (HTTPS, login required)", "address", listener.Addr().String(), "certificate", note,
 		"names", len(names.IPs)+len(names.DNS), "caFingerprintSha256", info.Fingerprint)
 	if cfg.RemoteHost != "" {
-		log.Info("remote access on for "+cfg.RemoteHost+", viewer-only", "remoteHost", cfg.RemoteHost, "policy", RemotePolicy())
+		remoteInfo, _ := certs.remote.CAInfo()
+		log.Info("remote access on for "+cfg.RemoteHost+", viewer-only", "remoteHost", cfg.RemoteHost, "certificate", remoteNote,
+			"remoteCaFingerprintSha256", remoteInfo.Fingerprint, "policy", RemotePolicy())
 	}
 	return server, func() error { return server.ServeTLS(listener, "", "") }, nil
 }
@@ -171,6 +246,18 @@ func WriteCAInstructions(out io.Writer, info CAInfo) {
 	fmt.Fprintln(out, "  3. iPhone: Settings > General > VPN & Device Management > install, then Settings > General > About > Certificate Trust Settings > enable it.")
 	fmt.Fprintln(out, "     Android: Settings > Security > Install a certificate > CA certificate. Windows: double-click > Install > Local Machine/Current User > Trusted Root Certification Authorities.")
 	fmt.Fprintln(out, "  Details and removal: docs/ui.md.")
+}
+
+// WriteRemoteCAInstructions prints the remote CA of `holocron tls ca --remote`: where it is, its
+// fingerprint and how to install it on a phone, on the home network only. No key, no token.
+func WriteRemoteCAInstructions(out io.Writer, info CAInfo, host string) {
+	fmt.Fprintf(out, "Holocron remote CA for %s\n  file:         %s\n  name:         %s\n  valid until:  %s\n  SHA-256:      %s\n\n", host, info.Path, info.Subject, info.NotAfter.Format("2006-01-02"), info.Fingerprint)
+	fmt.Fprintf(out, "It lets a device trust %s (and names under it) and nothing else: no address, no other name. Install it ONLY while the phone is on your home network:\n", host)
+	fmt.Fprintln(out, "  1. Get the file to the phone over the LAN: open https://<this PC's address>:<port>/ there, sign in, and use the Phone tab (\"Reach this PC from outside the home\"), or copy the file. It is never offered over the public name.")
+	fmt.Fprintln(out, "  2. Check the SHA-256 shown by the phone against the line above before trusting it.")
+	fmt.Fprintln(out, "  3. iPhone: Settings > General > VPN & Device Management > install, then Settings > General > About > Certificate Trust Settings > enable it.")
+	fmt.Fprintln(out, "     Android: Settings > Security > Install a certificate > CA certificate. Windows: double-click > Install > Local Machine/Current User > Trusted Root Certification Authorities.")
+	fmt.Fprintln(out, "  When web.remoteHost changes, the web app makes a new remote CA at its next start and every phone must install the new one. Details: docs/ui.md.")
 }
 
 // ---------------------------------------------------------------------------

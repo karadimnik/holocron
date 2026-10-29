@@ -44,6 +44,7 @@
   <div id="viewOnly" class="viewonly-note hide"><strong>This address is view-only.</strong> You can watch the cameras and browse footage, but not start, stop or change anything. Use the PC itself for that.</div>
   <!-- Shown to a signed-in viewer (detectAccess in app.js); the server refuses a viewer everything else anyway. -->
   <div id="viewerNote" class="viewonly-note hide"><strong>You are signed in as a viewer.</strong> You can watch the cameras and browse footage. Starting, stopping, recording and settings are for admins.</div>
+  <div id="remoteNote" class="viewonly-note hide"><strong>Signed in from outside your home network: viewing only.</strong></div>
 
   <!-- Shown instead of everything below once a stop this page asked for has taken the server away
        (renderStopped in app.js): under holocron up the web app stops with the rest. -->
@@ -210,6 +211,17 @@
         <div class="actions"><a class="btn primary" href="api/tls/ca.crt" download="ipcctv-local-ca.crt">Download the certificate</a></div>
         <p class="hint">iPhone: open the file, install it under Settings &gt; General &gt; VPN &amp; Device Management, then turn it on under Settings &gt; General &gt; About &gt; Certificate Trust Settings.
           Android: Settings &gt; Security &gt; Install a certificate &gt; CA certificate. Steps and removal are in docs/ui.md.</p>
+      </div>
+    </div>
+    <!-- Shown only while web.remoteHost is set (api/tls/info names it); never offered to a remote peer, which gets a 404 there. -->
+    <div class="panel hide" id="remotePhonePanel" style="margin-top:16px">
+      <header><h2>Reach this PC from outside the home</h2></header>
+      <div class="form">
+        <p class="hint"><strong>Install this ONLY while on your home network; it lets this phone trust <span id="remoteHostName"></span> and nothing else.</strong>
+          It is a second certificate authority, separate from the one above, for the address you use away from home. Before you trust it, check that the device shows this fingerprint:</p>
+        <p><code id="remoteFingerprint" style="word-break:break-all"></code></p>
+        <div class="actions"><a class="btn primary" href="api/tls/ca.crt?ca=remote" download="holocron-remote-ca.crt">Download the remote certificate</a></div>
+        <p class="hint">Install it and turn it on exactly like the one above. If the remote address changes, this certificate is replaced and must be installed again. Steps are in docs/ui.md.</p>
       </div>
     </div>
   </section>

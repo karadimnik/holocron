@@ -107,7 +107,7 @@ Registry: the slice `commands` in `cmd/holocron/commands.go`; `holocron --help` 
 | `user remove <name> [--force] [--auth-dir D]` | remove a user and its sessions (not the last admin while other users remain; the last user only with --force while web.tlsListen is set) |
 | `user list [--json] [--auth-dir D]` | names, role and creation time (never hashes) |
 | `user unlock <name> [--auth-dir D]` | lift a sign-in lockout in a running web app |
-| `tls ca [--json] [--tls-dir D]` | the local CA: file, SHA-256 fingerprint and the steps to install it on a device (created when absent) |
+| `tls ca [--remote] [--json] [--tls-dir D]` | the local CA (--remote: the remote CA of web.remoteHost): file, SHA-256 fingerprint and the steps to install it on a device (created when absent) |
 | `tls print [--out FILE] [--tls-dir D]` | write the CA certificate (never a key) to standard output or a file |
 | `tls rotate --yes [--tls-dir D]` | delete the CA and server certificate; a fresh pair is made at the next web start and every device must reinstall the CA |
 | `secret set <name>` | store a secret read from standard input (camera.user, camera.password, ...) |
@@ -190,7 +190,7 @@ G9 to G15 rows are this document's mapping from the test names, not a table kept
 | `<root>/<Camera_Name>/<YYYY-MM-DD>/<Camera_Name>_YYYYMMDD_HHMMSS+hhmm.mkv` (a filed day: the local date in the name) | the mover (`archive.FileDays`: the supervisor's `moveLoop`, `archive migrate`); `archive flatten` removes it | the same readers; the PowerShell system does not read it |
 | `holocron.config.json`, `cameras.json` | the operator; `cam`, `config`, the web Settings page through `app.PutCameras` / `app.EditConfigMany` | every role (supervisor re-reads every `ReconcileSeconds`) |
 | auth folder: `users.json`, `sessions.json`, `auth.log`, `relay_api_secret.txt`, `live_view_secret.txt` | the web auth service; `user` commands; the supervisor generates the two secrets (`internal/relay/login.go`) | the web role, the supervisor (both resolve the live secret by one rule since W17) |
-| tls folder: `ca.crt`, `ca.key`, `leaf.crt`, `leaf.key` | `tls ca`, the web role at first HTTPS start | the web role |
+| tls folder: `ca.crt`, `ca.key`, `leaf.crt`, `leaf.key` (with web.remoteHost also `ca-remote.*`, `leaf-remote.*`) | `tls ca` (`--remote`), the web role at first HTTPS start | the web role |
 
 Windows defaults: auth `%LOCALAPPDATA%\IPCCTV\camui\auth`, tls `%LOCALAPPDATA%\IPCCTV\tls`. Never open, print or copy a secret, key or credential file.
 

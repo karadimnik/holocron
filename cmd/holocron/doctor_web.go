@@ -15,6 +15,7 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"time"
 
@@ -239,9 +240,9 @@ func webRemote(_ context.Context, r *drun) []check {
 	}
 	fails, ferr := web.ReadSignInFailures(w.AuthDir, r.now.Add(-24*time.Hour))
 	data := map[string]any{"remoteHost": w.RemoteHost, "viewerOnly": true, "accounts": admins + viewers, "admins": admins, "viewers": viewers,
-		"certificateNamesRemoteHost": false, "signInFailures24h": fails}
+		"signInFailures24h": fails}
 	out := []check{mk(lvInfo, "remote access", "on for %s: requests from public addresses are viewer-only; %d account(s) (%d admin, %d viewer); policy: %s", w.RemoteHost, admins+viewers, admins, viewers, web.RemotePolicy()).data(data)}
-	out = append(out, mk(lvWarn, "remote access", "the server certificate does not name %s: the local CA is name-constrained to private addresses and names, so a device outside the LAN sees a certificate name warning", w.RemoteHost).fix("see %s ; a VPN to the home network avoids it", docs))
+	out = append(out, remoteCertChecks(r, w.TLSDir, w.RemoteHost)...)
 	if viewers == 0 {
 		out = append(out, mk(lvWarn, "remote access", "no viewer account: only admins could sign in remotely, and they would be capped to viewer").fix("holocron user add NAME --role viewer (reads the password from standard input)"))
 	}
@@ -254,6 +255,53 @@ func webRemote(_ context.Context, r *drun) []check {
 			top = append(top, fmt.Sprintf("%s (%d)", p.Peer, p.Count))
 		}
 		out = append(out, mk(lvWarn, "remote access", "%d failed or locked remote sign-in attempt(s) in 24 h (LAN: %d); top peers: %s", fails.Remote, fails.LAN, strings.Join(top, ", ")).fix("holocron logs --component web --since 24h ; use strong passwords (holocron user passwd NAME) ; to close remote access remove web.remoteHost and the router's port-forward"))
+	}
+	return out
+}
+
+// remoteCertChecks: the remote CA (constrained to exactly the host, critical) and its leaf (names
+// exactly the host, not near expiry), and that their keys are protected like the LAN CA key.
+func remoteCertChecks(r *drun, tlsDir, host string) []check {
+	const (
+		name    = "remote certificate"
+		restart = "holocron restart --detach (the web role issues it at start)"
+		install = "holocron tls ca --remote, install it on each phone WHILE ON THE HOME NETWORK, then holocron restart --detach"
+	)
+	st, err := web.RemoteCertState(tlsDir, host)
+	switch {
+	case err != nil:
+		return []check{mk(lvWarn, name, "the remote CA cannot be read: %v", err).fix("%s", install)}
+	case !st.CAPresent:
+		return []check{mk(lvWarn, name, "there is no remote CA for %s yet, so a phone outside the home network cannot trust the name", host).fix("%s", install)}
+	case st.CAProblem != "":
+		return []check{mk(lvWarn, name, "the remote CA %s cannot serve %s: %s; the web role replaces it at its next start and every phone must then install the new one", st.CAPath, host, st.CAProblem).fix("%s", install)}
+	}
+	data := map[string]any{"remoteHost": host, "file": st.CAPath, "fingerprint": st.Fingerprint, "notAfter": st.CANotAfter}
+	out := []check{mk(lvInfo, name, "remote CA SHA-256 %s: only for %s (critical name constraint, path length 0), valid until %s, file %s; the phone must show this fingerprint when you install it", st.Fingerprint, host, st.CANotAfter.Format("2006-01-02"), st.CAPath).data(data)}
+	left := st.LeafNotAfter.Sub(r.now)
+	days := int(left.Hours() / 24)
+	switch {
+	case !st.LeafPresent:
+		out = append(out, mk(lvWarn, name, "there is no server certificate for %s yet", host).fix("%s", restart))
+	case !st.LeafSigned:
+		out = append(out, mk(lvWarn, name, "the server certificate for %s is not signed by the remote CA", host).fix("%s", restart))
+	case len(st.LeafNames) != 1 || st.LeafNames[0] != host:
+		out = append(out, mk(lvWarn, name, "the server certificate names %s, not exactly %s", strings.Join(st.LeafNames, ", "), host).fix("%s", restart))
+	case days < certWarnDays:
+		out = append(out, mk(lvWarn, name, "the server certificate for %s expires in %d day(s) (%s); the web role should have renewed it", host, days, st.LeafNotAfter.Format("2006-01-02")).fix("%s", restart))
+	default:
+		out = append(out, mk(lvOK, name, "the server certificate names exactly %s, valid %d more day(s) (until %s)", host, days, st.LeafNotAfter.Format("2006-01-02")).data(map[string]any{"daysLeft": days, "notAfter": st.LeafNotAfter}))
+	}
+	if len(st.UnprotectedKeys) > 0 {
+		var fixes []string
+		for _, p := range st.UnprotectedKeys {
+			if runtime.GOOS == "windows" {
+				fixes = append(fixes, fmt.Sprintf(`icacls "%s" /inheritance:r /grant:r "%%USERNAME%%:F"`, p))
+			} else {
+				fixes = append(fixes, "chmod 600 "+p)
+			}
+		}
+		out = append(out, mk(lvWarn, name, "a remote key is not protected like the LAN CA key (owner only): %s", st.KeyDetail).fix("%s", strings.Join(fixes, " ; ")))
 	}
 	return out
 }

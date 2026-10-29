@@ -29,7 +29,8 @@ const (
 type tlsRig struct {
 	handler http.Handler
 	logs    *bytes.Buffer
-	mgr     *certManager
+	mgr     *certManager // certs.lan
+	certs   serverCerts
 	cfg     Config
 	auth    *authService
 	clock   *fakeClock
@@ -48,16 +49,8 @@ func newTLSRig(t *testing.T, mutate func(*Config), opts ...serveOpt) *tlsRig {
 	}
 	logs := &bytes.Buffer{}
 	log := slog.New(slog.NewTextHandler(logs, &slog.HandlerOptions{Level: slog.LevelDebug}))
-	mgr := newCertManager(cfg.TLSDir, log)
-	ip, _, err := parseTLSListen(cfg.TLSListen)
+	certs, names, _, _, err := prepareCerts(cfg, log)
 	if err != nil {
-		t.Fatal(err)
-	}
-	names, err := buildCertNames(ip, cfg.TLSHosts)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if _, err := mgr.Prepare(names); err != nil {
 		t.Fatal(err)
 	}
 	clock := newFakeClock()
@@ -68,11 +61,11 @@ func newTLSRig(t *testing.T, mutate func(*Config), opts ...serveOpt) *tlsRig {
 		t.Fatal(err)
 	}
 	auth := newAuthService(cfg.AuthDir, users, log, clock.now, hasher)
-	h, err := newTLSHandler(cfg, log, mgr, names, auth, opts...)
+	h, err := newTLSHandler(cfg, log, certs, names, auth, opts...)
 	if err != nil {
 		t.Fatal(err)
 	}
-	return &tlsRig{handler: h, logs: logs, mgr: mgr, cfg: cfg, auth: auth, clock: clock, users: users}
+	return &tlsRig{handler: h, logs: logs, mgr: certs.lan, certs: certs, cfg: cfg, auth: auth, clock: clock, users: users}
 }
 
 var tlsReqCounter int
@@ -243,7 +236,7 @@ func TestRealTLSListener(t *testing.T) {
 	if err != nil {
 		t.Skip("no loopback listener")
 	}
-	server := &http.Server{Handler: rig.handler, TLSConfig: serverTLSConfig(rig.mgr)}
+	server := &http.Server{Handler: rig.handler, TLSConfig: serverTLSConfig(rig.certs)}
 	go server.ServeTLS(ln, "", "")
 	defer server.Close()
 	addr := ln.Addr().String()

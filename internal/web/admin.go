@@ -1,6 +1,8 @@
 package web
 
 import (
+	"crypto/x509"
+	"encoding/pem"
 	"errors"
 	"fmt"
 	"io"
@@ -262,6 +264,90 @@ func tlsManager(tlsDir string) *certManager {
 // CAFor returns the CA's description, creating the CA when there is none (what -print-ca does).
 func CAFor(tlsDir string) (CAInfo, error) { return tlsManager(tlsDir).CAInfo() }
 
+// RemoteCAFor returns the remote CA's description for host (a NormalizeRemoteHost name),
+// creating it when there is none and replacing one made for another name.
+func RemoteCAFor(tlsDir, host string) (CAInfo, error) {
+	if tlsDir == "" {
+		tlsDir = defaultTLSDir()
+	}
+	return newRemoteCertManager(tlsDir, host, slog.New(slog.NewTextHandler(io.Discard, nil))).CAInfo()
+}
+
+// RemoteCertReport is what `holocron doctor` checks of the remote CA and leaf, read from the
+// folder without creating anything and without opening a key.
+type RemoteCertReport struct {
+	CAPath      string
+	CAPresent   bool
+	CAProblem   string // "" when it is a remote CA for exactly the host (remoteCAProblem)
+	Fingerprint string
+	CANotAfter  time.Time
+
+	LeafPresent  bool
+	LeafSigned   bool // signed by the remote CA
+	LeafNames    []string
+	LeafNotAfter time.Time
+
+	// UnprotectedKeys are the remote key files not protected like the LAN CA key (owner only);
+	// KeyDetail says how they differ.
+	UnprotectedKeys []string
+	KeyDetail       string
+}
+
+// RemoteCertState reads the remote CA and leaf of tlsDir ("" = the default folder) for host.
+func RemoteCertState(tlsDir, host string) (RemoteCertReport, error) {
+	if tlsDir == "" {
+		tlsDir = defaultTLSDir()
+	}
+	rep := RemoteCertReport{CAPath: filepath.Join(tlsDir, remoteCACertFile)}
+	ca, err := readCert(rep.CAPath)
+	if errors.Is(err, os.ErrNotExist) {
+		return rep, nil
+	}
+	if err != nil {
+		return rep, err
+	}
+	rep.CAPresent, rep.CAProblem, rep.Fingerprint, rep.CANotAfter = true, remoteCAProblem(ca, host), fingerprint(ca), ca.NotAfter
+	if leaf, err := readCert(filepath.Join(tlsDir, remoteLeafCertFile)); err == nil {
+		rep.LeafPresent, rep.LeafSigned, rep.LeafNotAfter = true, leaf.CheckSignatureFrom(ca) == nil, leaf.NotAfter
+		rep.LeafNames = append(rep.LeafNames, leaf.DNSNames...)
+		for _, ip := range leaf.IPAddresses {
+			rep.LeafNames = append(rep.LeafNames, ip.String())
+		}
+	} else if !errors.Is(err, os.ErrNotExist) {
+		return rep, err
+	}
+	lanDesc, _, lanErr := keyProtection(filepath.Join(tlsDir, caKeyFile))
+	for _, name := range []string{remoteCAKeyFile, remoteLeafKeyFile} {
+		path := filepath.Join(tlsDir, name)
+		desc, ownerOnly, err := keyProtection(path)
+		switch {
+		case errors.Is(err, os.ErrNotExist):
+			continue
+		case err != nil:
+			return rep, err
+		case !ownerOnly || lanErr == nil && desc != lanDesc:
+			rep.UnprotectedKeys = append(rep.UnprotectedKeys, path)
+			rep.KeyDetail = name + ": " + desc
+			if lanErr == nil {
+				rep.KeyDetail += "; the LAN CA key: " + lanDesc
+			}
+		}
+	}
+	return rep, nil
+}
+
+func readCert(path string) (*x509.Certificate, error) {
+	raw, err := os.ReadFile(path)
+	if err != nil {
+		return nil, err
+	}
+	block, _ := pem.Decode(raw)
+	if block == nil || block.Type != "CERTIFICATE" {
+		return nil, errors.New(path + " does not hold a certificate")
+	}
+	return x509.ParseCertificate(block.Bytes)
+}
+
 // CACertificatePEM is the CA certificate of the folder - the one file that may leave this machine.
 // It never returns a key; a missing CA is an error wrapping os.ErrNotExist.
 func CACertificatePEM(tlsDir string) ([]byte, error) {
@@ -275,8 +361,9 @@ func CACertificatePEM(tlsDir string) ([]byte, error) {
 	return pem, nil
 }
 
-// tlsFiles are the files the web role keeps in the TLS folder.
-var tlsFiles = []string{caCertFile, caKeyFile, leafCertFile, leafKeyFile}
+// tlsFiles are the files the web role keeps in the TLS folder: the LAN CA and leaf, and the
+// remote CA and leaf (web.remoteHost).
+var tlsFiles = []string{caCertFile, caKeyFile, leafCertFile, leafKeyFile, remoteCACertFile, remoteCAKeyFile, remoteLeafCertFile, remoteLeafKeyFile}
 
 // RotateCA deletes the CA and server certificate files (and the folder when nothing else is in it),
 // so the next web start creates a fresh CA and leaf. It returns the paths removed. Files it does

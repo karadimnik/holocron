@@ -69,7 +69,7 @@ func init() {
 		{path: "user list", usage: "[--json] [--auth-dir D]", about: "names, role and creation time (never hashes)", action: "user.list", audit: true, run: cmdUserList},
 		{path: "user unlock", usage: "<name> [--auth-dir D]", about: "lift a sign-in lockout in a running web app", action: "user.unlock", mutating: true, run: cmdUserUnlock},
 
-		{path: "tls ca", usage: "[--json] [--tls-dir D]", about: "the local CA: file, SHA-256 fingerprint and the steps to install it on a device (created when absent)", action: "tls.ca", mutating: true, run: cmdTLSCA},
+		{path: "tls ca", usage: "[--remote] [--json] [--tls-dir D]", about: "the local CA (--remote: the remote CA of web.remoteHost): file, SHA-256 fingerprint and the steps to install it on a device (created when absent)", action: "tls.ca", mutating: true, run: cmdTLSCA},
 		{path: "tls print", usage: "[--out FILE] [--tls-dir D]", about: "write the CA certificate (never a key) to standard output or a file", action: "tls.print", audit: true, run: cmdTLSPrint},
 		{path: "tls rotate", usage: "--yes [--tls-dir D]", about: "delete the CA and server certificate; a fresh pair is made at the next web start and every device must reinstall the CA", action: "tls.rotate", mutating: true, run: cmdTLSRotate},
 
