@@ -68,6 +68,11 @@ func normalizeUsername(name string) string {
 	return strings.ToLower(name)
 }
 
+// formUsername is a name as a form sent it, without the leading and trailing white space a
+// phone keyboard adds after a suggested word. No valid name holds white space, so trimming
+// never makes two accounts meet. Passwords are never trimmed.
+func formUsername(name string) string { return strings.TrimSpace(name) }
+
 // UserStore keeps accounts and the per-username failure state the lockout needs.
 type UserStore interface {
 	// Get finds a user by name, ignoring case. A missing user is (zero, false, nil).

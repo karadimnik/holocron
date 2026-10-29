@@ -14,6 +14,7 @@ import (
 	"strings"
 	"testing"
 	"time"
+	"unicode"
 )
 
 const genericLoginError = "Invalid username or password"
@@ -844,5 +845,159 @@ func TestLoopbackSetupIsGuardedAndSerialised(t *testing.T) {
 	a, b := <-results, <-results
 	if !(a == 201 && b == 404 || a == 404 && b == 201) {
 		t.Errorf("concurrent setups: %d and %d, want one 201 and one 404", a, b)
+	}
+}
+
+// ---------------------------------------------------------------------------
+// A name from a form loses its surrounding white space (a phone keyboard appends a space after
+// a suggested word) before the lookup, the lockout key and the log; a password never does.
+// ---------------------------------------------------------------------------
+
+func TestFormUsernameTrimsSurroundingWhiteSpaceOnly(t *testing.T) {
+	long := strings.Repeat("a", 64)
+	for _, c := range []struct {
+		in, want string
+		valid    bool
+	}{
+		{"viewer ", "viewer", true},
+		{" viewer", "viewer", true},
+		{"  viewer  ", "viewer", true},
+		{"\tviewer\t", "viewer", true},
+		{"viewer\u00a0", "viewer", true},       // no-break space
+		{"\u3000viewer\u202f", "viewer", true}, // ideographic space, narrow no-break space
+		{"viewer\r\n", "viewer", true},
+		{"vie wer", "vie wer", false}, // an inner space is kept, and refused
+		{" vie wer ", "vie wer", false},
+		{"   ", "", false}, // empty after the trim: refused as before
+		{"", "", false},
+		{"viewer\u200b", "viewer\u200b", false}, // a zero-width space is not white space: kept, refused
+		{" " + long + " ", long, true},          // the 64-character limit counts after the trim
+		{" " + long + "a ", long + "a", false},
+	} {
+		if got := formUsername(c.in); got != c.want || validUsername(got) != c.valid {
+			t.Errorf("formUsername(%q) = %q (valid %v), want %q (valid %v)", c.in, got, validUsername(got), c.want, c.valid)
+		}
+	}
+}
+
+// Trimming can never make two accounts meet: no valid name holds a white-space character, so
+// every valid name is its own trim, and the store refuses any other.
+func TestNoValidUsernameHoldsWhiteSpace(t *testing.T) {
+	for r := rune(0); r <= unicode.MaxRune; r++ {
+		if unicode.IsSpace(r) && (validUsername(string(r)) || validUsername("a"+string(r)+"b")) {
+			t.Errorf("a user name may contain the white space %U", r)
+		}
+	}
+	store := newFileUserStore(t.TempDir(), newFakeClock().now)
+	for i, name := range []string{"bob ", " bob", "b ob", "bob\u00a0", "bob\t"} {
+		if err := store.Put(User{ID: fmt.Sprint("u-", i), Username: name, Hash: "h", Role: roleViewer}); err == nil {
+			t.Errorf("the store accepted the name %q", name)
+		}
+	}
+}
+
+func TestSignInTrimsTheNameButNeverThePassword(t *testing.T) {
+	rig := newTLSRig(t, nil)
+	rig.addViewer(t)
+	n := 0
+	from := func() string { n++; return fmt.Sprintf("192.168.4.%d:1", n) }
+	for _, name := range []string{"bob ", " bob", " bob ", "\tbob", "bob\u00a0", "BOB "} {
+		rec := rig.loginFrom(from(), name, viewerPassword)
+		if rec.Code != 200 || sessionCookieOf(rec) == nil {
+			t.Fatalf("the viewer as %q: %d %s", name, rec.Code, rec.Body.String())
+		}
+		if body := decode(t, rec); body["username"] != viewerUser || body["role"] != roleViewer {
+			t.Errorf("the viewer as %q: %v", name, body)
+		}
+	}
+	for _, name := range []string{"b ob", "   "} {
+		if rec := rig.loginFrom(from(), name, viewerPassword); rec.Code != 401 || decode(t, rec)["error"] != genericLoginError {
+			t.Errorf("%q: %d %s, want the generic 401", name, rec.Code, rec.Body.String())
+		}
+	}
+	// A spaced unknown name and a spaced known name with a wrong password still answer alike.
+	wrong := rig.loginFrom(from(), "bob ", "not the password at all")
+	unknown := rig.loginFrom(from(), "nobody-here ", "not the password at all")
+	if wrong.Code != 401 || wrong.Body.String() != unknown.Body.String() || fmt.Sprint(wrong.Header()) != fmt.Sprint(unknown.Header()) {
+		t.Errorf("known and unknown differ: %d %v %q / %d %v %q", wrong.Code, wrong.Header(), wrong.Body.String(), unknown.Code, unknown.Header(), unknown.Body.String())
+	}
+	// Spaces in a password, at either end too, are part of it.
+	hash, _ := fastHasher().Hash(" spaced pass phrase ")
+	if err := rig.users.Put(User{ID: "u-carol", Username: "carol", Hash: hash, Role: roleViewer}); err != nil {
+		t.Fatal(err)
+	}
+	if rec := rig.loginFrom(from(), "carol ", " spaced pass phrase "); rec.Code != 200 {
+		t.Errorf("a password with spaces: %d %s", rec.Code, rec.Body.String())
+	}
+	if rec := rig.loginFrom(from(), "carol", "spaced pass phrase"); rec.Code != 401 {
+		t.Errorf("the password was trimmed: %d", rec.Code)
+	}
+}
+
+func TestLockoutCountsEverySpellingOfANameAsOne(t *testing.T) {
+	rig := newTLSRig(t, nil)
+	rig.addViewer(t)
+	for i, name := range []string{"bob ", "bob", " bob", "bob\t", " bob "} {
+		if rec := rig.loginFrom(fmt.Sprintf("192.168.5.%d:1", i+1), name, "wrong password number "+fmt.Sprint(i)); rec.Code != 401 {
+			t.Fatalf("failure %d as %q: %d", i+1, name, rec.Code)
+		}
+		if st, _ := rig.users.Failure(viewerUser); st.Count != i+1 {
+			t.Fatalf("after %q the count is %d, want %d", name, st.Count, i+1)
+		}
+	}
+	if size := rig.users.size(); size != 1 {
+		t.Errorf("the failure table holds %d names, want 1", size)
+	}
+	if rec := rig.loginFrom("192.168.5.9:1", "bob", viewerPassword); rec.Code != http.StatusTooManyRequests {
+		t.Fatalf("five failures in any spelling must lock: %d", rec.Code)
+	}
+	// An unlock of the name applies to a spaced spelling too.
+	if err := rig.auth.Unlock("local", viewerUser); err != nil {
+		t.Fatal(err)
+	}
+	if rec := rig.loginFrom("192.168.5.10:1", "bob ", viewerPassword); rec.Code != 200 {
+		t.Errorf("after the unlock: %d %s", rec.Code, rec.Body.String())
+	}
+}
+
+func TestAuthLogRecordsTheTrimmedName(t *testing.T) {
+	rig := newTLSRig(t, nil)
+	rig.addViewer(t)
+	rig.loginFrom("192.168.6.1:1", "bob ", "not the password at all")
+	rig.loginFrom("192.168.6.2:1", " bob\u00a0", viewerPassword)
+	text := string(mustRead(t, filepath.Join(rig.cfg.AuthDir, authLogName)))
+	for _, want := range []string{`ip=192.168.6.1 event=login result=fail user="bob"`, `ip=192.168.6.2 event=login result=ok user="bob"`} {
+		if !strings.Contains(text, want) {
+			t.Errorf("auth.log lacks %s:\n%s", want, text)
+		}
+	}
+	if strings.Count(text, "\n") != 2 {
+		t.Errorf("auth.log:\n%s", text)
+	}
+	if console := rig.logs.String(); strings.Contains(console, `target="bob `) || strings.Contains(console, `target=" bob`) {
+		t.Errorf("the console log names the untrimmed name:\n%s", console)
+	}
+}
+
+func TestSetupAndAdminFormsTrimTheName(t *testing.T) {
+	h, cfg := loopbackHandler(t, nil)
+	if rec := (probe{method: "POST", path: "/api/auth/setup", headers: jsonHdr, body: loginBody(" anna ", "a long enough password")}).do(h); rec.Code != 201 {
+		t.Fatalf("setup: %d %s", rec.Code, rec.Body.String())
+	}
+	if users, _ := newFileUserStore(cfg.AuthDir, time.Now).List(); len(users) != 1 || users[0].Username != "anna" {
+		t.Errorf("setup stored %+v", users)
+	}
+	a := newAdminRig(t)
+	if rec := a.call("POST", "/api/admin/users/add", `{"username":"carol ","password":"`+viewerPassword+`","role":"viewer"}`); rec.Code != 200 {
+		t.Fatalf("add: %d %s", rec.Code, rec.Body.String())
+	}
+	if u, found, _ := a.users.Get("carol"); !found || u.Username != "carol" {
+		t.Errorf("add stored %+v", u)
+	}
+	if rec := a.call("POST", "/api/admin/users/password", `{"username":" carol","password":"another long passphrase"}`); rec.Code != 200 {
+		t.Fatalf("password: %d %s", rec.Code, rec.Body.String())
+	}
+	if u, _, _ := a.users.Get("carol"); !verifyPassword(u.Hash, "another long passphrase") {
+		t.Error("the password of carol did not change")
 	}
 }
