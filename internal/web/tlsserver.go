@@ -142,6 +142,9 @@ func startTLS(cfg Config, log *slog.Logger, opts ...serveOpt) (*http.Server, fun
 	info, _ := mgr.CAInfo()
 	log.Info("camui listening (HTTPS, login required)", "address", listener.Addr().String(), "certificate", note,
 		"names", len(names.IPs)+len(names.DNS), "caFingerprintSha256", info.Fingerprint)
+	if cfg.RemoteHost != "" {
+		log.Info("remote access on for "+cfg.RemoteHost+", viewer-only", "remoteHost", cfg.RemoteHost, "policy", RemotePolicy())
+	}
 	return server, func() error { return server.ServeTLS(listener, "", "") }, nil
 }
 

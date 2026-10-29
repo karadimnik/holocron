@@ -216,12 +216,17 @@ type webReport struct {
 	Listen    string `json:"listen"`
 	TLS       bool   `json:"tls"`
 	TLSListen string `json:"tlsListen,omitempty"`
-	Login     bool   `json:"login"`
-	LoginNote string `json:"loginNote,omitempty"`
+	// RemoteHost is web.remoteHost while remote access is on (the HTTPS listener set too).
+	RemoteHost string `json:"remoteHost,omitempty"`
+	Login      bool   `json:"login"`
+	LoginNote  string `json:"loginNote,omitempty"`
 }
 
 func webStatus(e *env) webReport {
 	w := webReport{Enabled: e.cfg.Web.Enabled, Listen: e.cfg.Web.Listen, TLS: e.cfg.Web.TLSListen != "", TLSListen: e.cfg.Web.TLSListen}
+	if w.TLS {
+		w.RemoteHost = e.cfg.Web.RemoteHost
+	}
 	entries, err := osx.NewRegistry(e.paths.AuxFile()).Load()
 	if err == nil {
 		for _, c := range entries {
@@ -375,6 +380,9 @@ func printWeb(w io.Writer, r webReport) {
 		fmt.Fprint(w, ", HTTPS listener off")
 	}
 	fmt.Fprintf(w, ", login %s\n", map[bool]string{true: "exists", false: "none yet"}[r.Login])
+	if r.RemoteHost != "" {
+		fmt.Fprintf(w, "remote access: on (viewer-only) for %s\n", r.RemoteHost)
+	}
 }
 
 func channelText(m map[string]bool) string {

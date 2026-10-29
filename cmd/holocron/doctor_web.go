@@ -8,6 +8,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"net"
 	"net/http"
@@ -25,6 +26,7 @@ var webTable = []doctorCheck{
 	{id: "web.http", group: "web", concurrent: true, run: webHTTP},
 	{id: "web.tls", group: "web", concurrent: true, run: webTLS},
 	{id: "web.users", group: "web", run: webUsers},
+	{id: "web.remote", group: "web", run: webRemote},
 	{id: "web.errors", group: "web", run: webErrors},
 }
 
@@ -215,4 +217,43 @@ func webErrors(_ context.Context, r *drun) []check {
 		return []check{mk(lvWarn, "web errors", "%d ERROR record(s) of the web role in the last hour, the first: %s", n, first).fix("holocron logs --component web --level error --since 1h")}
 	}
 	return []check{mk(lvOK, "web errors", "no ERROR record of the web role in the last hour")}
+}
+
+// remoteFailWarn: this many refused remote sign-in attempts in 24 h warn.
+const remoteFailWarn = 20
+
+// webRemote: remote access (web.remoteHost). Off: no line. On: what it allows and its policy,
+// and a warning for each thing that undermines it.
+func webRemote(_ context.Context, r *drun) []check {
+	w := r.e.cfg.Web
+	if !w.Enabled || w.RemoteHost == "" {
+		return nil
+	}
+	const docs = "docs/ui.md, section \"Reaching Holocron from outside the home network\""
+	if w.TLSListen == "" {
+		return []check{mk(lvWarn, "remote access", "web.remoteHost is %s but web.tlsListen is empty: remote access is served only by the HTTPS login listener", w.RemoteHost).fix("set web.tlsListen to this PC's private IPv4:port in %s, or remove web.remoteHost ; see %s", r.e.paths.Config, docs)}
+	}
+	admins, viewers, err := web.UserRoles(w.AuthDir)
+	if err != nil {
+		return []check{mk(lvWarn, "remote access", "on for %s, but the user file cannot be read: %v", w.RemoteHost, err).fix("holocron user list")}
+	}
+	fails, ferr := web.ReadSignInFailures(w.AuthDir, r.now.Add(-24*time.Hour))
+	data := map[string]any{"remoteHost": w.RemoteHost, "viewerOnly": true, "accounts": admins + viewers, "admins": admins, "viewers": viewers,
+		"certificateNamesRemoteHost": false, "signInFailures24h": fails}
+	out := []check{mk(lvInfo, "remote access", "on for %s: requests from public addresses are viewer-only; %d account(s) (%d admin, %d viewer); policy: %s", w.RemoteHost, admins+viewers, admins, viewers, web.RemotePolicy()).data(data)}
+	out = append(out, mk(lvWarn, "remote access", "the server certificate does not name %s: the local CA is name-constrained to private addresses and names, so a device outside the LAN sees a certificate name warning", w.RemoteHost).fix("see %s ; a VPN to the home network avoids it", docs))
+	if viewers == 0 {
+		out = append(out, mk(lvWarn, "remote access", "no viewer account: only admins could sign in remotely, and they would be capped to viewer").fix("holocron user add NAME --role viewer (reads the password from standard input)"))
+	}
+	switch {
+	case ferr != nil:
+		out = append(out, mk(lvWarn, "remote access", "auth.log cannot be read: %v", ferr).fix("holocron logs --component web --since 24h"))
+	case fails.Remote >= remoteFailWarn:
+		var top []string
+		for _, p := range fails.TopPeers {
+			top = append(top, fmt.Sprintf("%s (%d)", p.Peer, p.Count))
+		}
+		out = append(out, mk(lvWarn, "remote access", "%d failed or locked remote sign-in attempt(s) in 24 h (LAN: %d); top peers: %s", fails.Remote, fails.LAN, strings.Join(top, ", ")).fix("holocron logs --component web --since 24h ; use strong passwords (holocron user passwd NAME) ; to close remote access remove web.remoteHost and the router's port-forward"))
+	}
+	return out
 }

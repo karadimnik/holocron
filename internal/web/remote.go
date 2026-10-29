@@ -1,8 +1,14 @@
 package web
 
 import (
+	"errors"
+	"fmt"
+	"io/fs"
 	"net/http"
 	"net/netip"
+	"os"
+	"path/filepath"
+	"sort"
 	"strings"
 	"time"
 )
@@ -85,4 +91,92 @@ func remoteHeaders(w http.ResponseWriter, r *http.Request) {
 	if strings.HasPrefix(r.URL.Path, "/api/") {
 		h.Set("Cache-Control", "no-store")
 	}
+}
+
+// RemotePolicy is the remote sign-in policy in one line, for `holocron doctor`.
+func RemotePolicy() string {
+	return fmt.Sprintf("viewer-only whatever the account's role; sign-in %d a minute per peer (%d banked, an IPv6 /64 is one peer) beside the per-name lockout; sessions end after %.0f h idle or %.0f days",
+		remoteLoginRatePerMinute, remoteLoginBurst, remoteSession.idle.Hours(), remoteSession.lifetime.Hours()/24)
+}
+
+// UserRoles counts the users of authDir by effective role ("" = the web app's default folder).
+func UserRoles(authDir string) (admins, viewers int, err error) {
+	if authDir == "" {
+		authDir = defaultAuthDir()
+	}
+	users, err := newFileUserStore(authDir, time.Now).List()
+	for _, u := range users {
+		if isAdmin(u) {
+			admins++
+		} else {
+			viewers++
+		}
+	}
+	return admins, viewers, err
+}
+
+// PeerCount is one peer address and its number of failed sign-in attempts.
+type PeerCount struct {
+	Peer  string `json:"peer"`
+	Count int    `json:"count"`
+}
+
+// SignInFailures is what auth.log says about refused sign-in attempts (fail, locked, throttled)
+// since a moment, by peer class (PeerIsRemote of the logged address).
+type SignInFailures struct {
+	Remote   int         `json:"remote"`
+	LAN      int         `json:"lan"`
+	TopPeers []PeerCount `json:"topRemotePeers"` // the 3 remote peers with the most, most first
+}
+
+// ReadSignInFailures counts the refused sign-in attempts in auth.log and its rotated copy since
+// `since` ("" = the default folder). It reads the time, ip=, event= and result= fields only.
+func ReadSignInFailures(authDir string, since time.Time) (SignInFailures, error) {
+	if authDir == "" {
+		authDir = defaultAuthDir()
+	}
+	var out SignInFailures
+	byPeer := map[string]int{}
+	for _, name := range []string{authLogName + ".1", authLogName} {
+		data, err := os.ReadFile(filepath.Join(authDir, name))
+		if errors.Is(err, fs.ErrNotExist) {
+			continue
+		}
+		if err != nil {
+			return out, err
+		}
+		for _, line := range strings.Split(string(data), "\n") {
+			f := strings.Fields(line)
+			if len(f) < 4 || f[2] != "event=login" {
+				continue
+			}
+			at, err := time.Parse(time.RFC3339, f[0])
+			if err != nil || at.Before(since) {
+				continue
+			}
+			switch f[3] {
+			case "result=fail", "result=locked", "result=throttled":
+			default:
+				continue
+			}
+			ip := strings.TrimPrefix(f[1], "ip=")
+			if !PeerIsRemote(ip) {
+				out.LAN++
+				continue
+			}
+			out.Remote++
+			byPeer[ip]++
+		}
+	}
+	for ip, n := range byPeer {
+		out.TopPeers = append(out.TopPeers, PeerCount{Peer: ip, Count: n})
+	}
+	sort.Slice(out.TopPeers, func(i, j int) bool {
+		a, b := out.TopPeers[i], out.TopPeers[j]
+		return a.Count > b.Count || a.Count == b.Count && a.Peer < b.Peer
+	})
+	if len(out.TopPeers) > 3 {
+		out.TopPeers = out.TopPeers[:3]
+	}
+	return out, nil
 }
