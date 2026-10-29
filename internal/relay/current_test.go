@@ -163,12 +163,16 @@ func TestLiveGeneratorInputErrors(t *testing.T) {
 	g := loadGolden(t)
 	base := LiveInputs{Config: configFor(t, nil), Cameras: g.cameras(), Login: Login{User: "camlive", Secret: g.LiveLogin.Secret}}
 	for name, f := range map[string]func(*LiveInputs){
-		"injected whep":   func(l *LiveInputs) { l.Config.LiveWhepAddress = "127.0.0.1:8889\napi: yes" },
-		"injected host":   func(l *LiveInputs) { l.Config.LiveAdvertiseHosts = []string{`1.2.3.4"], api: yes #`} },
-		"bad name":        func(l *LiveInputs) { l.Cameras = []config.Camera{{Name: ":::"}} },
-		"live collision":  func(l *LiveInputs) { l.Cameras = []config.Camera{{Name: "Door"}, {Name: "Door Sub"}} },
-		"empty login":     func(l *LiveInputs) { l.Login = Login{} },
-		"substream break": func(l *LiveInputs) { l.Config.LiveSubStream = "s\nx" },
+		"injected whep": func(l *LiveInputs) { l.Config.LiveWhepAddress = "127.0.0.1:8889\napi: yes" },
+		"injected host": func(l *LiveInputs) { l.Config.LiveAdvertiseHosts = []string{`1.2.3.4"], api: yes #`} },
+		"injected remote host": func(l *LiveInputs) {
+			l.Config.LiveAdvertiseRemoteHost, l.Config.Web.RemoteHost = true, `remote.example.org"], api: yes #`
+		},
+		"empty remote host": func(l *LiveInputs) { l.Config.LiveAdvertiseRemoteHost = true },
+		"bad name":          func(l *LiveInputs) { l.Cameras = []config.Camera{{Name: ":::"}} },
+		"live collision":    func(l *LiveInputs) { l.Cameras = []config.Camera{{Name: "Door"}, {Name: "Door Sub"}} },
+		"empty login":       func(l *LiveInputs) { l.Login = Login{} },
+		"substream break":   func(l *LiveInputs) { l.Config.LiveSubStream = "s\nx" },
 	} {
 		c := base
 		f(&c)

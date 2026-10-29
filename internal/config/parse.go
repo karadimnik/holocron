@@ -25,7 +25,7 @@ var droppedKeys = []string{
 	"RelayReadyPollMs", "ViewerPromoteCheckSeconds",
 }
 
-var liveKeys = []string{"LiveViewEnabled", "LiveExePath", "LiveConfigPath", "LiveWhepAddress", "LiveUdpAddress", "LiveAdvertiseHosts", "LiveSubStream", "LiveCloseAfterSeconds", "LiveSecretPath"}
+var liveKeys = []string{"LiveViewEnabled", "LiveExePath", "LiveConfigPath", "LiveWhepAddress", "LiveUdpAddress", "LiveAdvertiseHosts", "LiveAdvertiseRemoteHost", "LiveSubStream", "LiveCloseAfterSeconds", "LiveSecretPath"}
 
 // keptKeys is every key Parse reads, in the order problems are reported.
 var keptKeys = []string{
@@ -37,7 +37,7 @@ var keptKeys = []string{
 	"LogRepeatSuppressSeconds", "StatusEventCount",
 	"RestreamerEnabled", "RelayExternal", "RestreamerExePath", "RestreamerConfigPath", "RelayBase", "RelayApiBase", "RelayProbeTimeoutMs",
 	"RelayStartupWaitSeconds", "RelayReadyWaitSeconds", "StartStaggerMs",
-	"LiveViewEnabled", "LiveExePath", "LiveConfigPath", "LiveWhepAddress", "LiveUdpAddress", "LiveAdvertiseHosts", "LiveSubStream", "LiveCloseAfterSeconds", "LiveSecretPath",
+	"LiveViewEnabled", "LiveExePath", "LiveConfigPath", "LiveWhepAddress", "LiveUdpAddress", "LiveAdvertiseHosts", "LiveAdvertiseRemoteHost", "LiveSubStream", "LiveCloseAfterSeconds", "LiveSecretPath",
 	"logging", "alerts", "secrets", "web",
 }
 
@@ -307,6 +307,7 @@ func (d *decoder) run(c *Config) {
 	d.alerts(c)
 	d.secrets(c)
 	d.web(c)
+	d.liveRemoteHost(c)
 	d.crossChecks(c)
 }
 

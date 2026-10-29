@@ -26,6 +26,7 @@ var editableRules = map[string]string{
 	"LiveViewEnabled":             "true or false",
 	"LiveUdpAddress":              "127.0.0.1, 0.0.0.0 or one private IPv4, with a port 1-65535",
 	"LiveAdvertiseHosts":          "a JSON array of at most 4 unique private IPv4 addresses",
+	"LiveAdvertiseRemoteHost":     "true or false; true needs web.remoteHost and a LiveUdpAddress beyond loopback",
 	"LiveSubStream":               "1 to 32 characters from A-Z a-z 0-9 _ -",
 	"LiveCloseAfterSeconds":       "whole number 1 to 3600",
 	"logging.level":               "error, warn, info, debug or trace",
