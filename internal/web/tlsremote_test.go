@@ -522,3 +522,60 @@ func TestPhoneTabOffersTheRemoteCA(t *testing.T) {
 		}
 	}
 }
+
+// /api/auth/me says whether the session is remote, and the page shows the remote banner instead
+// of the viewer one for it.
+func TestMeSaysRemoteAndThePageShowsTheRemoteBanner(t *testing.T) {
+	rig := remoteRig(t, nil)
+	for _, c := range []struct {
+		peer, host string
+		want       bool
+	}{{publicPeer, remoteName, true}, {lanPeer, lanHost, false}, {lanPeer, remoteName, false}} {
+		cookie, _ := rig.signInFrom(t, testUser, c.peer, c.host)
+		var me map[string]any
+		if err := json.Unmarshal(rig.do(tlsReq{path: "/api/auth/me", host: c.host, remote: c.peer, cookie: cookie}).Body.Bytes(), &me); err != nil {
+			t.Fatal(err)
+		}
+		if me["remote"] != c.want {
+			t.Errorf("me from %s as %s: remote %v, want %v", c.peer, c.host, me["remote"], c.want)
+		}
+		rig.clock.advance(time.Minute)
+	}
+	page, _ := staticFiles.ReadFile("static/index.html")
+	app, _ := staticFiles.ReadFile("static/app.js")
+	if !strings.Contains(string(page), `<div id="remoteNote" class="viewonly-note hide"><strong>Signed in from outside your home network: viewing only.</strong></div>`) {
+		t.Error("index.html lacks the remote banner")
+	}
+	for _, want := range []string{`remote = me.remote === true`, `el("viewerNote").classList.toggle("hide", !viewer || remote)`, `el("remoteNote").classList.toggle("hide", !remote)`} {
+		if !strings.Contains(string(app), want) {
+			t.Errorf("app.js lacks %s", want)
+		}
+	}
+}
+
+func TestRemoteCertState(t *testing.T) {
+	cfg := remoteCfg(t, testRemoteHost)
+	if st, err := RemoteCertState(cfg.TLSDir, testRemoteHost); err != nil || st.CAPresent {
+		t.Errorf("empty folder: %+v %v", st, err)
+	}
+	certs, _, _, _, err := prepareCerts(cfg, quietLog())
+	if err != nil {
+		t.Fatal(err)
+	}
+	st, err := RemoteCertState(cfg.TLSDir, testRemoteHost)
+	info, _ := certs.remote.CAInfo()
+	if err != nil || !st.CAPresent || st.CAProblem != "" || st.Fingerprint != info.Fingerprint || !st.LeafPresent || !st.LeafSigned ||
+		!slices.Equal(st.LeafNames, []string{testRemoteHost}) || len(st.UnprotectedKeys) != 0 || st.LeafNotAfter.Before(time.Now().Add(190*24*time.Hour)) {
+		t.Errorf("after start: %+v %v", st, err)
+	}
+	if st, _ := RemoteCertState(cfg.TLSDir, "other.example.org"); !strings.Contains(st.CAProblem, "it is for "+testRemoteHost) {
+		t.Errorf("for another host: %q", st.CAProblem)
+	}
+	if runtime.GOOS != "windows" {
+		key := filepath.Join(cfg.TLSDir, remoteLeafKeyFile)
+		os.Chmod(key, 0o640)
+		if st, _ := RemoteCertState(cfg.TLSDir, testRemoteHost); !slices.Equal(st.UnprotectedKeys, []string{key}) || st.KeyDetail != "leaf-remote.key: mode 0640; the LAN CA key: mode 0600" {
+			t.Errorf("readable key: %v %q", st.UnprotectedKeys, st.KeyDetail)
+		}
+	}
+}

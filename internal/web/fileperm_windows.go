@@ -4,8 +4,10 @@ package web
 
 import (
 	"fmt"
+	"os"
 	"os/exec"
 	"os/user"
+	"slices"
 	"strings"
 )
 
@@ -26,4 +28,29 @@ func restrictToOwner(path string, isDir bool) error {
 		return fmt.Errorf("icacls could not restrict %s: %v: %s", path, err, strings.TrimSpace(string(out)))
 	}
 	return nil
+}
+
+// keyProtection describes who may use a key file (its access entries as icacls lists them) and
+// whether exactly one, not inherited, entry is left: what restrictToOwner sets.
+func keyProtection(path string) (string, bool, error) {
+	if _, err := os.Stat(path); err != nil {
+		return "", false, err
+	}
+	out, err := exec.Command("icacls.exe", path).CombinedOutput()
+	if err != nil {
+		return "", false, fmt.Errorf("icacls could not read %s: %v: %s", path, err, strings.TrimSpace(string(out)))
+	}
+	var entries []string
+	for i, line := range strings.Split(strings.ReplaceAll(string(out), "\r", ""), "\n") {
+		if i == 0 {
+			line = strings.TrimPrefix(line, path)
+		}
+		line = strings.TrimSpace(line)
+		if line == "" {
+			break // the summary line follows the blank one
+		}
+		entries = append(entries, line)
+	}
+	inherited := slices.ContainsFunc(entries, func(e string) bool { return strings.Contains(e, "(I)") })
+	return strings.Join(entries, ", "), len(entries) == 1 && !inherited, nil
 }

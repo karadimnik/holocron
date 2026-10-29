@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -18,7 +19,8 @@ func remoteRigConfig(t *testing.T, r *rig, remoteHost string) string {
 	authDir := filepath.Join(filepath.Dir(filepath.Dir(r.cfg)), "auth")
 	os.MkdirAll(authDir, 0o700)
 	os.WriteFile(filepath.Join(authDir, "users.json"), []byte(`{"version":1,"users":[{"id":"u1","username":"anna","hash":"x","role":"admin","createdAt":"2026-01-01T00:00:00Z"}]}`), 0o600)
-	extra := `"tlsListen": "192.168.1.50:8443", `
+	tlsDir := filepath.ToSlash(filepath.Join(filepath.Dir(filepath.Dir(r.cfg)), "tls"))
+	extra := `"tlsListen": "192.168.1.50:8443", "tlsDir": "` + tlsDir + `", `
 	if remoteHost != "" {
 		extra += `"remoteHost": "` + remoteHost + `", `
 	}
@@ -58,7 +60,8 @@ func TestDoctorWebRemote(t *testing.T) {
 		"on for remote.example.org: requests from public addresses are viewer-only; 1 account(s) (1 admin, 0 viewer); policy: viewer-only whatever the account's role; sign-in 2 a minute per peer (3 banked",
 		"sessions end after 12 h idle or 7 days",
 		"web.remote warn remote access",
-		"the server certificate does not name remote.example.org",
+		"web.remote warn remote certificate",
+		"there is no remote CA for remote.example.org yet, so a phone outside the home network cannot trust the name",
 		"no viewer account: only admins could sign in remotely, and they would be capped to viewer",
 		"20 failed or locked remote sign-in attempt(s) in 24 h (LAN: 2); top peers: 203.0.113.7 (12), 198.51.100.9 (5), 2001:db8::1 (2)",
 	} {
@@ -66,7 +69,10 @@ func TestDoctorWebRemote(t *testing.T) {
 			t.Errorf("missing %q in\n%s", want, text)
 		}
 	}
-	for _, want := range []string{"holocron user add NAME --role viewer", `"remoteHost": "remote.example.org"`, `"viewerOnly": true`} {
+	if strings.Contains(text, "does not name") {
+		t.Error("the R13 permanent certificate warning is still there")
+	}
+	for _, want := range []string{"holocron user add NAME --role viewer", "holocron tls ca --remote, install it on each phone WHILE ON THE HOME NETWORK", `"remoteHost": "remote.example.org"`, `"viewerOnly": true`} {
 		if !strings.Contains(strings.ReplaceAll(out, `":"`, `": "`), want) && !strings.Contains(out, want) {
 			t.Errorf("JSON lacks %s:\n%s", want, out)
 		}
@@ -126,5 +132,44 @@ func TestTLSCARemote(t *testing.T) {
 	jout, _, _ := r.run("--json", "tls", "ca", "--remote", "--tls-dir", dir)
 	if !strings.Contains(jout, `"remoteHost"`) || !strings.Contains(jout, "remote.example.org") || !strings.Contains(jout, `"sha256"`) {
 		t.Errorf("--json: %s", jout)
+	}
+}
+
+// The doctor's remote certificate lines as the remote CA comes and goes: present without a leaf,
+// made for another name, and a key left readable by others.
+func TestDoctorWebRemoteCertificate(t *testing.T) {
+	r := newRig(t)
+	r.running()
+	remoteRigConfig(t, r, "remote.example.org")
+	tlsDir := filepath.Join(filepath.Dir(filepath.Dir(r.cfg)), "tls")
+	r.doctorTools(nil)
+	caOut := mustRun(r, "tls", "ca", "--remote")
+	fp := strings.Fields(caOut[strings.Index(caOut, "SHA-256:"):])[1]
+	raw := mustRun(r, "--json", "doctor", "--group", "web")
+	if !strings.Contains(raw, "holocron restart --detach (the web role issues it at start)") {
+		t.Errorf("no restart fix for the missing leaf:\n%s", raw)
+	}
+	text := textOf(t, raw)
+	for _, want := range []string{
+		"web.remote info remote certificate remote CA SHA-256 " + fp + ": only for remote.example.org (critical name constraint, path length 0)",
+		filepath.Join(tlsDir, "ca-remote.crt"),
+		"web.remote warn remote certificate there is no server certificate for remote.example.org yet",
+	} {
+		if !strings.Contains(text, want) {
+			t.Errorf("missing %q in\n%s", want, text)
+		}
+	}
+	if runtime.GOOS != "windows" {
+		key := filepath.Join(tlsDir, "ca-remote.key")
+		os.Chmod(key, 0o644)
+		out := mustRun(r, "--json", "doctor", "--group", "web")
+		if !strings.Contains(textOf(t, out), "a remote key is not protected like the LAN CA key (owner only): ca-remote.key: mode 0644") || !strings.Contains(out, "chmod 600 "+key) {
+			t.Errorf("unprotected key not reported:\n%s", text)
+		}
+	}
+	remoteRigConfig(t, r, "other.example.org")
+	text = textOf(t, mustRun(r, "--json", "doctor", "--group", "web"))
+	if !strings.Contains(text, "cannot serve other.example.org: it is for remote.example.org, not other.example.org; the web role replaces it at its next start and every phone must then install the new one") {
+		t.Errorf("a remote CA for the old name not reported:\n%s", text)
 	}
 }

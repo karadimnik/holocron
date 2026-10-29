@@ -462,7 +462,7 @@ func (a *authService) handleMe(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusOK, map[string]any{"authenticated": false, "loginRequired": true})
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"authenticated": true, "username": user.Username, "role": effectiveRole(user.Role), "loginRequired": true, "next": safeNext(r.URL.Query().Get("next"))})
+	writeJSON(w, http.StatusOK, map[string]any{"authenticated": true, "username": user.Username, "role": effectiveRole(user.Role), "remote": a.remote(r), "loginRequired": true, "next": safeNext(r.URL.Query().Get("next"))})
 }
 
 // ---------------------------------------------------------------------------

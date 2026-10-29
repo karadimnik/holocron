@@ -1454,8 +1454,11 @@ async function detectAccess() {
   } catch (err) {
     readOnly = false;
   }
+  let remote = false;
   try {
-    role = (await getJSON("api/auth/me")).role || "admin";
+    const me = await getJSON("api/auth/me");
+    role = me.role || "admin";
+    remote = me.remote === true; // signed in from a public address: capped to viewer by the server
   } catch (err) {
     role = "viewer"; // unknown: show the least
   }
@@ -1463,7 +1466,8 @@ async function detectAccess() {
   viewOnly = readOnly || viewer;
   document.body.classList.toggle("viewonly", viewOnly);
   el("viewOnly").classList.toggle("hide", !readOnly || viewer);
-  el("viewerNote").classList.toggle("hide", !viewer);
+  el("viewerNote").classList.toggle("hide", !viewer || remote);
+  el("remoteNote").classList.toggle("hide", !remote);
   // inert: not focusable, not clickable, hidden from assistive technology as editable.
   for (const panel of document.querySelectorAll('section[data-tab="set"] > .panel:not(#tlsPanel)')) panel.inert = viewOnly;
   // Settings are the admins'; the Admin tab also needs a listener that is not view-only.
