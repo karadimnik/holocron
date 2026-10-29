@@ -47,6 +47,8 @@ type authService struct {
 	now      func() time.Time
 	runner   *cli.Runner // the mutating routes run as Actions; nil: over log
 
+	remoteHost string // web.remoteHost; "" = remote access off (remote.go)
+
 	hashSlots chan struct{}
 	dummyOnce sync.Once
 	dummy     string
@@ -145,7 +147,16 @@ func (a *authService) signedIn(r *http.Request) (User, bool) {
 // audit record. The class is the one of the pattern mux will run for the request.
 func (a *authService) gate(mux *http.ServeMux, next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		remote := a.remote(r)
+		if remote && hostName(r.Host) != a.remoteHost {
+			denied(a.log, r, User{}, "", "remote peer naming another host")
+			writeAPIError(w, http.StatusForbidden, "forbidden: host not allowed")
+			return
+		}
 		user, ok := a.signedIn(r)
+		if ok && remote {
+			user.Role = roleViewer // the remote cap: a viewer whatever the account's role
+		}
 		if ok {
 			r = r.WithContext(context.WithValue(r.Context(), ctxKey{}, user))
 		}
@@ -170,9 +181,17 @@ func (a *authService) gate(mux *http.ServeMux, next http.Handler) http.Handler {
 			denied(a.log, r, user, pattern, "unclassified route")
 			writeAPIError(w, http.StatusForbidden, "forbidden")
 			return
+		case class == accessAdmin && remote:
+			denied(a.log, r, user, pattern, "remote access is viewer-only")
+			writeAPIError(w, http.StatusForbidden, adminOnlyMessage)
+			return
 		case class == accessAdmin && !isAdmin(user):
 			denied(a.log, r, user, pattern, "admins only")
 			writeAPIError(w, http.StatusForbidden, adminOnlyMessage)
+			return
+		case remote && !readOnlyAllowed(r.Method, r.URL.Path):
+			denied(a.log, r, user, pattern, "remote access is view-only")
+			writeAPIError(w, http.StatusForbidden, readOnlyMessage)
 			return
 		}
 		next.ServeHTTP(w, r)
@@ -376,7 +395,11 @@ func (a *authService) handleLogin(w http.ResponseWriter, r *http.Request) {
 	}
 	a.audit(r, started, "anonymous", user.Username, "login", "ok")
 	a.setSessionCookie(w, token, int(sessionLifetime.Seconds()))
-	writeJSON(w, http.StatusOK, map[string]any{"ok": true, "username": user.Username, "role": effectiveRole(user.Role), "next": safeNext(req.Next)})
+	role := effectiveRole(user.Role)
+	if a.remote(r) {
+		role = roleViewer
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"ok": true, "username": user.Username, "role": role, "next": safeNext(req.Next)})
 }
 
 func (a *authService) dummyHash() string {

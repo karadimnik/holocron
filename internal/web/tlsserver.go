@@ -61,6 +61,7 @@ func newTLSHandler(cfg Config, log *slog.Logger, mgr *certManager, names certNam
 	if env.runner != nil {
 		auth.runner = env.runner
 	}
+	auth.remoteHost = cfg.RemoteHost
 	auth.routes(mux)
 	mux.HandleFunc("GET /api/tls/ca.crt", func(w http.ResponseWriter, r *http.Request) {
 		data, err := mgr.CACertPEM()
