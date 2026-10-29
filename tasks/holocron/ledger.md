@@ -147,6 +147,7 @@ Update this file in the same push as each merge: `git log --first-parent --merge
 | 45562f7 | 2026-10-29 | Merge Holocron B7: doctor segment-rate check uses the last 24 h (sunrise and sunset ramps no longer warn; empty segments warn as no data and never enter a baseline) |  |
 | 78662c4 | 2026-10-29 | Merge Holocron B8: a camera's last error is put into words on the Dashboard (what, when, handled); the chip says Unstable only from 3 restarts in the hour; a switched-off camera's old note is quiet |  |
 | 7749c8a | 2026-10-29 | Merge Holocron B9: the running version in the web footer, an About block and a stale-page notice, and on the first line of status, doctor and help |  |
+| 0750082 | 2026-10-29 | Merge Holocron R13: opt-in remote access (web.remoteHost, off by default): Host admission, viewer cap by peer address, stricter remote sign-in and sessions, headers, doctor web.remote; certificate for the public name is the open decision D25 (needs a constrained second CA) |  |
 
 ## Releases
 
