@@ -151,6 +151,7 @@ Update this file in the same push as each merge: `git log --first-parent --merge
 | f2ea208 | 2026-10-29 | Merge Holocron R14: remote CA constrained to exactly the remote name (pathlen 0, no IPs), served by SNI; installable only from the LAN; `tls ca --remote`; doctor checks and fingerprint; banner for remote sessions |  |
 | 0ab901a | 2026-10-29 | Merge Holocron R15: live video from outside the home network (LiveAdvertiseRemoteHost puts the DDNS name in webrtcAdditionalHosts; STUN rejected with MediaMTX v1.21.2 source evidence); doctor live.remote; tile explanations |  |
 | 2dc4111 | 2026-10-29 | Merge Holocron B10: sign-in trims white space around the user name (a phone keyboard added a trailing space), in the lookup, lockout key and auth.log; passwords untouched |  |
+| d8a93d8 | 2026-10-29 | Merge Holocron R17: the iPhone certificate steps are labelled not tested with Holocron; docs list the tested clients (Windows PC, Android incl. live video over the internet) and state iPhone and iPad are untested |  |
 
 ## Releases
 
