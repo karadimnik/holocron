@@ -7,7 +7,7 @@
 
 Holocron turns your PC into a 24/7 home security recorder. One small program records every IP camera with sound, heals itself when a stream drops, files footage by camera and day, frees space on its own, and alerts you when something is wrong. Watch live or replay clips from any browser or phone. Free for noncommercial use.
 
-[Features](#features) - [Platforms](#supported-platforms) - [Install](#install) - [Quick start](#quick-start) - [Documentation](#documentation) - [Releases](#releases-and-versioning) - [License](#license)
+[Features](#features) - [Screenshots](#screenshots) - [Platforms](#supported-platforms) - [Install](#install) - [Quick start](#quick-start) - [Documentation](#documentation) - [Releases](#releases-and-versioning) - [License](#license)
 
 ## Features
 
@@ -19,6 +19,24 @@ Holocron turns your PC into a 24/7 home security recorder. One small program rec
 * **Alerts** - desktop, the system log (Windows event log, syslog), the log file, a push channel (ntfy-style) and a webhook; `holocron alert test` proves each one.
 * **`holocron doctor`** - a read-only health check, grouped (setup, recording, connections, live, web, storage, system), with a fix for every problem.
 * **One executable** for every role and command: `holocron` (`holocron.exe` on Windows).
+
+## Screenshots
+
+Holocron v1.3.1 in a sandbox: six fake cameras, a fake supervisor and synthetic test-pattern footage.
+
+![Dashboard on a desktop: the verdict All good, recording 6 of 6 cameras, tiles for 16.2 days of footage headroom, 342.7 GB free and a 38.7 GB archive, the camera table with Record switches, recent events and services](docs/img/dashboard-desktop.png)
+
+![Dashboard needing attention: 1 of 6 cameras is not recording, Garage is offline after 4 restarts in the last hour, and a note under Front Door says its stream ended at 12:03 PM and was restarted automatically](docs/img/attention-desktop.png)
+
+![Footage: the camera list, Today and Yesterday, a segment playing a test pattern, and the segments of the day with start time, length, size and a recording now marker](docs/img/footage-desktop.png)
+
+![Admin, System section: version v1.3.1, platform and Go version, Reload configuration, and the Danger zone with Stop Holocron](docs/img/admin-system-desktop.png)
+
+On a phone, signed in as a viewer over the HTTPS listener:
+
+<img src="docs/img/dashboard-phone.png" width="300" alt="Dashboard on a phone: the viewer notice, All good, the headroom, free space and archive tiles stacked, and compact camera rows"> <img src="docs/img/footage-phone.png" width="300" alt="Footage on a phone: the viewer notice, the camera and date lists, and the player below them">
+
+Every tab, explained: [the web app](docs/ui.md).
 
 ## Supported platforms
 
