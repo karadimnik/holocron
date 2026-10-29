@@ -10,6 +10,14 @@ Holocron's web app is a browser page served by the `holocron` program itself: Da
 - **A web page you visit cannot drive it.** Every request passes the guard in `internal/web/guard.go` before any handler: the `Host` header must be an allowed name (against DNS rebinding); on `/api/` a `Sec-Fetch-Site` other than `same-origin` or `none`, or an `Origin` that is not the address the request went to, is refused with 403; a state-changing request with a body must be `application/json` (else 415). The one exception is `POST /api/live/{camera}/whep`, which carries `application/sdp`. A request with neither `Origin` nor `Sec-Fetch-Site` (a script, `curl`) passes these checks.
 - **Every change is a logged action.** Mutating routes run as `cli.Action`s named `web.control`, `web.record`, `web.cameras.put`, `web.config.put`, `web.acknowledge`, `web.login`, `web.logout`, `web.setup`, `web.live.create`, `web.live.delete` and `web.admin.*` (`internal/web/actions.go`, `admin_api.go`). Read the log with `holocron logs --component web`.
 
+## Tested clients
+
+What the author has actually run, so you can judge the rest:
+
+- **Tested:** a Windows PC (Firefox 158 appeared in the live-view diagnostic of 22 Oct 2026) and an Android phone: Dashboard, sign-in and live video over the home network, and since 29 Oct 2026 over the internet on 5G through [remote access](#reaching-holocron-from-outside-the-home-network) (the internet test used Firefox for Android).
+- **NOT tested: iPhone and iPad** (iOS and iPadOS, in any browser). Nothing in this guide about iOS has been run on a real device: the iPhone certificate steps follow the usual iOS procedure and are unverified, and whether iOS accepts the remote CA (its name constraint) and its 199-day certificate is UNVERIFIED.
+- **Not tested by the author:** other browsers and systems (Chrome, Edge, Safari on a Mac, Firefox on Linux) for this app. The stress tests in [tests/stress/live-view](../tests/stress/live-view/README.md) measured how much CPU and GPU Chrome and Edge need to decode six streams on a PC; that measures the design, it is not a test of the app on those browsers.
+
 ## Starting it
 
 | How | What happens |
@@ -243,7 +251,7 @@ The first start with `web.tlsListen` set (or `holocron tls ca`) creates a local 
 
 **Install the CA once per device, in this order.** The download needs a session: (1) open `https://192.168.1.50:8443/` on the device and click through the one certificate warning, (2) sign in, (3) open the **Phone** tab and download the certificate, (4) check that the fingerprint the device shows equals the one on the page or from `holocron tls ca`, (5) install it, (6) reopen the page: no warning any more.
 
-- **iPhone:** open the file, install it under Settings > General > VPN & Device Management, then turn it on under Settings > General > About > Certificate Trust Settings.
+- **iPhone (not tested with Holocron):** open the file, install it under Settings > General > VPN & Device Management, then turn it on under Settings > General > About > Certificate Trust Settings.
 - **Android:** Settings > Security > Install a certificate > CA certificate.
 - **Windows:** double-click the file > Install > Trusted Root Certification Authorities.
 

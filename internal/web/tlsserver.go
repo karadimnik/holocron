@@ -243,7 +243,7 @@ func WriteCAInstructions(out io.Writer, info CAInfo) {
 	fmt.Fprintln(out, "Install it once on each device (this file is the CA CERTIFICATE only; its key stays in the same folder and must stay private):")
 	fmt.Fprintln(out, "  1. Get the file to the device: open https://<this PC's address>:<port>/ there, click through the first warning, sign in, and use the Phone tab (or Settings > Connect a phone for an admin, or open /api/tls/ca.crt), or copy the file.")
 	fmt.Fprintln(out, "  2. Check the SHA-256 shown by the device against the line above before trusting it.")
-	fmt.Fprintln(out, "  3. iPhone: Settings > General > VPN & Device Management > install, then Settings > General > About > Certificate Trust Settings > enable it.")
+	fmt.Fprintln(out, "  3. iPhone (not tested with Holocron): Settings > General > VPN & Device Management > install, then Settings > General > About > Certificate Trust Settings > enable it.")
 	fmt.Fprintln(out, "     Android: Settings > Security > Install a certificate > CA certificate. Windows: double-click > Install > Local Machine/Current User > Trusted Root Certification Authorities.")
 	fmt.Fprintln(out, "  Details and removal: docs/ui.md.")
 }
@@ -255,7 +255,7 @@ func WriteRemoteCAInstructions(out io.Writer, info CAInfo, host string) {
 	fmt.Fprintf(out, "It lets a device trust %s (and names under it) and nothing else: no address, no other name. Install it ONLY while the phone is on your home network:\n", host)
 	fmt.Fprintln(out, "  1. Get the file to the phone over the LAN: open https://<this PC's address>:<port>/ there, sign in, and use the Phone tab (\"Reach this PC from outside the home\"), or copy the file. It is never offered over the public name.")
 	fmt.Fprintln(out, "  2. Check the SHA-256 shown by the phone against the line above before trusting it.")
-	fmt.Fprintln(out, "  3. iPhone: Settings > General > VPN & Device Management > install, then Settings > General > About > Certificate Trust Settings > enable it.")
+	fmt.Fprintln(out, "  3. iPhone (not tested with Holocron): Settings > General > VPN & Device Management > install, then Settings > General > About > Certificate Trust Settings > enable it.")
 	fmt.Fprintln(out, "     Android: Settings > Security > Install a certificate > CA certificate. Windows: double-click > Install > Local Machine/Current User > Trusted Root Certification Authorities.")
 	fmt.Fprintln(out, "  When web.remoteHost changes, the web app makes a new remote CA at its next start and every phone must install the new one. Details: docs/ui.md.")
 }

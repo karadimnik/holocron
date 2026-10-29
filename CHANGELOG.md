@@ -20,6 +20,10 @@ A version is `MAJOR.MINOR.PATCH`, tagged `vMAJOR.MINOR.PATCH`. The public interf
 
 ## [Unreleased]
 
+### Changed
+
+- The iPhone certificate steps (Phone tab, Admin tab, `holocron tls ca`) say they have not been tested with Holocron; the README, `docs/ui.md` and `docs/limitations.md` list the clients that were tested (a Windows PC and an Android phone, including live video over the internet) and state that iPhone and iPad are not.
+
 ## [1.3.1] - 2026-10-29
 
 ### Fixed

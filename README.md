@@ -28,6 +28,8 @@ Holocron turns your PC into a 24/7 home security recorder. One small program rec
 | Linux | amd64, arm64 | Built and tested in CI on `ubuntu-latest`, including the real-ffmpeg and real-process suites. Not yet run in production. | systemd user unit, exercised in WSL2 only |
 | macOS | arm64 (Apple silicon) | Built and tested in CI on `macos-latest`, report-only (that job cannot fail a run). Not used outside CI. | launchd agent, untested on a Mac |
 
+**Browsers and devices.** Tested by the author: a Windows PC (Firefox) and an Android phone (Firefox for Android), including live video over the internet on 5G through remote access. **Not tested: iPhone and iPad (any browser on iOS).** Details: [docs/ui.md](docs/ui.md#tested-clients).
+
 The arm64 Linux build is cross-compiled; its tests run on amd64. Every known limit, with its source: [docs/limitations.md](docs/limitations.md); CI: [docs/ci.md](docs/ci.md); autostart per OS: [docs/autostart.md](docs/autostart.md).
 
 ## Requirements
