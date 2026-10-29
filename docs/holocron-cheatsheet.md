@@ -54,7 +54,7 @@ Names with a space need quotes: `holocron cam enable "Front Door"`. `--since` ta
 | Group | Checks |
 | --- | --- |
 | `setup` | configuration, ffmpeg (a development build is `info`, release unknown, assumed 5.0 or later), MediaMTX, ports, folders, archive root, clock, camera login, status, autostart, the old PowerShell system's scheduled tasks (Windows, read only) (`--setup-only` prints only this group) |
-| `recording` | heartbeat age, each camera alive, input `relay` (`direct` warns), restarts in the last hour (warn 3, fail 10), the newest segment GROWS on disk (sampled every 2 s, up to 10 s, until it does), gaps above 2 s in the last 24 h, the newest closed segment against the median rate of 2 h (`--deep`: ffprobe it for video and `pcm_alaw` audio) |
+| `recording` | heartbeat age, each camera alive, input `relay` (`direct` warns), restarts in the last hour (warn 3, fail 10), the newest segment GROWS on disk (sampled every 2 s, up to 10 s, until it does), gaps above 2 s in the last 24 h, the newest closed segment's rate against the last 24 h (warns below half the lowest rate or above 1.5 times the peak, so the day and night profiles of a camera are both normal; the median of 2 h is shown; `--deep`: ffprobe it for video and `pcm_alaw` audio) |
 | `connections` | each camera answers TCP and RTSP OPTIONS (as `cam test`), the relay serves every camera's path (with its readers), the expected listeners answer |
 | `live` | the live instance alive, the web role's live-secret login accepted by it (the 22 Oct 502), every camera's live paths |
 | `web` | the web role alive, `GET /api/status` on loopback (control path), HTTPS handshake, certificate days left, the CA's fingerprint, a login user, web errors of the last hour |
