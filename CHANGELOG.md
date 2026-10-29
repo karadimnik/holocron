@@ -22,7 +22,8 @@ A version is `MAJOR.MINOR.PATCH`, tagged `vMAJOR.MINOR.PATCH`. The public interf
 
 ### Added
 
-- Remote access, off by default: `web.remoteHost` lets the HTTPS login listener answer to one public DNS name; requests from public peer addresses are viewer-only, with a stricter sign-in limit, shorter sessions, HSTS, a `web.remote` doctor check and a `holocron status` line ([docs/ui.md](docs/ui.md#reaching-holocron-from-outside-the-home-network)). The server certificate does not yet name the public host.
+- Remote access, off by default: `web.remoteHost` lets the HTTPS login listener answer to one public DNS name; requests from public peer addresses are viewer-only, with a stricter sign-in limit, shorter sessions, HSTS, a `web.remote` doctor check and a `holocron status` line ([docs/ui.md](docs/ui.md#reaching-holocron-from-outside-the-home-network)).
+- A trusted certificate for the remote name: with `web.remoteHost` set, a second local CA constrained to exactly that name serves its own server certificate by SNI (the LAN certificate is unchanged), installable only from the home network via the Phone tab or `holocron tls ca --remote`, checked by `holocron doctor`; remote sessions show "viewing only" ([docs/ui.md](docs/ui.md#reaching-holocron-from-outside-the-home-network)).
 
 ## [1.2.0] - 2026-10-29
 

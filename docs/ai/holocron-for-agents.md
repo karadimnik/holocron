@@ -190,7 +190,7 @@ G9 to G15 rows are this document's mapping from the test names, not a table kept
 | `<root>/<Camera_Name>/<YYYY-MM-DD>/<Camera_Name>_YYYYMMDD_HHMMSS+hhmm.mkv` (a filed day: the local date in the name) | the mover (`archive.FileDays`: the supervisor's `moveLoop`, `archive migrate`); `archive flatten` removes it | the same readers; the PowerShell system does not read it |
 | `holocron.config.json`, `cameras.json` | the operator; `cam`, `config`, the web Settings page through `app.PutCameras` / `app.EditConfigMany` | every role (supervisor re-reads every `ReconcileSeconds`) |
 | auth folder: `users.json`, `sessions.json`, `auth.log`, `relay_api_secret.txt`, `live_view_secret.txt` | the web auth service; `user` commands; the supervisor generates the two secrets (`internal/relay/login.go`) | the web role, the supervisor (both resolve the live secret by one rule since W17) |
-| tls folder: `ca.crt`, `ca.key`, `leaf.crt`, `leaf.key` | `tls ca`, the web role at first HTTPS start | the web role |
+| tls folder: `ca.crt`, `ca.key`, `leaf.crt`, `leaf.key` (with web.remoteHost also `ca-remote.*`, `leaf-remote.*`) | `tls ca` (`--remote`), the web role at first HTTPS start | the web role |
 
 Windows defaults: auth `%LOCALAPPDATA%\IPCCTV\camui\auth`, tls `%LOCALAPPDATA%\IPCCTV\tls`. Never open, print or copy a secret, key or credential file.
 

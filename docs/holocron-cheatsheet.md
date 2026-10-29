@@ -36,6 +36,7 @@ One page of lookups. First time here: [holocron-quickstart.md](holocron-quicksta
 | make a view-only user / change a role | `holocron user add bob --role viewer`, `holocron user role bob admin` |
 | remove a user / lift a lockout | `holocron user remove bob`, `holocron user unlock bob` |
 | show the CA to install on a phone / export it | `holocron tls ca` / `holocron tls print --out ca.crt` |
+| show the remote CA (web.remoteHost) to install on a phone, at home only | `holocron tls ca --remote` |
 | store the camera login | `holocron secret set camera.user`, `holocron secret set camera.password` |
 | take the login from the old PowerShell system's `camera_creds.xml` (Windows only; the file is left untouched) | `holocron secret import --from C:\old\camera_creds.xml` |
 | list stored secret names (never values) | `holocron secret list` |
@@ -80,7 +81,7 @@ Windows paths are shown. On Linux and macOS the configuration folder is as in th
 | recordings, the spool (the open segment and the newest closed one) | `<root>\<Camera_Name>\<Camera_Name>_YYYYMMDD_HHMMSS+hhmm.mkv` (`+hhmm` is the local UTC offset, for example `+0300`) | ffmpeg, 15-minute segments (default `SegmentSeconds` 900) |
 | recordings, filed days (the local date in the file name; never write here by hand) | `<root>\<Camera_Name>\YYYY-MM-DD\<Camera_Name>_YYYYMMDD_HHMMSS+hhmm.mkv` | the mover (`MoveToDayFolders`), `archive migrate`; undone by `archive flatten` |
 | web users, sessions, relay and live secrets | `%LOCALAPPDATA%\IPCCTV\camui\auth` (`users.json`, `sessions.json`, `relay_api_secret.txt`, `live_view_secret.txt`) | web role, supervisor; never open or copy them |
-| local CA and server certificate | `%LOCALAPPDATA%\IPCCTV\tls` (`ca.crt`, `ca.key`, `leaf.crt`, `leaf.key`) | `tls ca`, first HTTPS start |
+| local CA and server certificate | `%LOCALAPPDATA%\IPCCTV\tls` (`ca.crt`, `ca.key`, `leaf.crt`, `leaf.key`; with web.remoteHost also `ca-remote.crt`, `ca-remote.key`, `leaf-remote.crt`, `leaf-remote.key`) | `tls ca`, `tls ca --remote`, first HTTPS start |
 | camera login | Windows Credential Manager (`holocron/camera.user`, `holocron/camera.password`); file backend: `secrets.enc` + `secrets.key` in the auth folder | `secret set`, `secret import` |
 | relay and live MediaMTX config | `RestreamerConfigPath`, `LiveConfigPath` (default `C:\mediamtx\mediamtx.yml`, `mediamtx-live.yml`) | the supervisor generates them |
 
