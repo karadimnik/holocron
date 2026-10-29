@@ -213,7 +213,7 @@ function cameraChip(cam, live) {
 }
 
 function inputChip(cam, live) {
-  if (!live || !cam.InputMode) return '<span class="muted">&mdash;</span>';
+  if (!live || !cam.InputMode) return '<span class="muted">-</span>';
   if (cam.InputMode === "relay") return chip("good", "Relay");
   return chip("warn", "Direct");
 }
@@ -467,7 +467,7 @@ function render(payload, fetchError) {
     '<td><div class="cam-name">' + esc(cam.Name) + "</div>" + cameraDetail(cam, live, openNotes) + "</td>" +
     "<td>" + cameraChip(cam, live) + "</td>" +
     "<td>" + inputChip(cam, live) + "</td>" +
-    '<td class="num">' + (live ? age(cam.SecondsSinceLastClosedSegment) : "&mdash;") + "</td>" +
+    '<td class="num">' + (live ? age(cam.SecondsSinceLastClosedSegment) : "-") + "</td>" +
     '<td class="num">' + (cam.RestartsLastHour ? chip("ser", String(cam.RestartsLastHour)) : "0") + "</td>" +
     "<td>" + toggle(cam, live) + "</td></tr>").join("");
 
