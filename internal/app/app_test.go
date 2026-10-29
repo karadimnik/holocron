@@ -138,13 +138,26 @@ func TestEditConfigKeepsEverythingElse(t *testing.T) {
 	}
 }
 
+// LiveAdvertiseRemoteHost is editable and judged against the whole file: with remote access and a
+// media port beyond loopback it is taken.
+func TestEditConfigLiveAdvertiseRemoteHost(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "holocron.config.json")
+	os.WriteFile(path, []byte(`{"LiveUdpAddress":"0.0.0.0:8189","LiveAdvertiseHosts":["192.168.1.50"],"web":{"tlsListen":"192.168.1.50:8443","remoteHost":"remote.example.org"}}`), 0o644)
+	if _, err := EditConfig(path, "liveadvertiseremotehost", ParseValue("true"), plat); err != nil {
+		t.Fatal(err)
+	}
+	if c, _, err := config.Load(path, plat); err != nil || !c.LiveAdvertiseRemoteHost {
+		t.Errorf("after set: %v %v", c.LiveAdvertiseRemoteHost, err)
+	}
+}
+
 func TestEditConfigRefusalLeavesFileUntouched(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "holocron.config.json")
 	os.WriteFile(path, []byte(sampleConfig), 0o644)
 	for _, c := range []struct{ key, value string }{
 		{"SegmentSeconds", "0"}, {"SegmentSeconds", `"900"`}, {"LiveViewEnabled", "yes"}, {"logging.level", "loud"},
 		{"RootPath", "/x"}, {"FfmpegPath", "x"}, {"logging.levels.a.b", "debug"}, {"alerts.webhook.url", "http://example.org/x"},
-		{"secrets.backend", "vault"}, {"MaxAgePruneFraction", "2"},
+		{"secrets.backend", "vault"}, {"MaxAgePruneFraction", "2"}, {"LiveAdvertiseRemoteHost", "true"},
 	} {
 		_, err := EditConfig(path, c.key, ParseValue(c.value), plat)
 		if !errors.Is(err, cli.ErrRefused) {

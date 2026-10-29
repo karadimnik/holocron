@@ -86,9 +86,10 @@ type doctorDeps struct {
 	prober       func(cfg config.Config) shadow.Prober
 	platform     osx.Platform // its default folders: the relay and live secrets
 	listProcs    func() ([]osx.ProcEntry, error)
-	listen       func(network, addr string) error // binds an address for a moment (the set-up port checks)
-	checkTimeout time.Duration                    // per check
-	netBudget    time.Duration                    // every concurrent check together
+	listen       func(network, addr string) error                         // binds an address for a moment (the set-up port checks)
+	lookupIP     func(ctx context.Context, host string) ([]net.IP, error) // doctor --deep: web.remoteHost
+	checkTimeout time.Duration                                            // per check
+	netBudget    time.Duration                                            // every concurrent check together
 	parallel     int
 }
 
@@ -115,10 +116,15 @@ func defaultDoctorDeps() doctorDeps {
 		prober:       shadowProber,
 		listProcs:    osx.ListProcs,
 		listen:       bindFree,
+		lookupIP:     lookupIP,
 		checkTimeout: 3 * time.Second,
 		netBudget:    10 * time.Second,
 		parallel:     4,
 	}
+}
+
+func lookupIP(ctx context.Context, host string) ([]net.IP, error) {
+	return net.DefaultResolver.LookupIP(ctx, "ip", host)
 }
 
 // drun is one doctor run: what every check reads, resolved once.
@@ -185,7 +191,7 @@ func cmdDoctor(ctx context.Context, e *env) error {
 	quiet := fs.Bool("quiet", false, "only the lines that are not ok, and the summary")
 	group := fs.String("group", "", "only these groups (comma-separated): "+strings.Join(doctorGroups, ", "))
 	setupOnly := fs.Bool("setup-only", false, "only the set-up checks, printed as before")
-	deep := fs.Bool("deep", false, "also ffprobe the newest closed segment of each camera")
+	deep := fs.Bool("deep", false, "also ffprobe the newest closed segment of each camera, and resolve web.remoteHost")
 	pos, err := parseFlags(fs, e.args)
 	if err != nil {
 		return err

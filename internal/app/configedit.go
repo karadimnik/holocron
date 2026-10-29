@@ -23,7 +23,7 @@ import (
 var EditableKeys = []string{
 	"SegmentSeconds", "ReserveGB", "PruneHysteresisGB", "MaxRetentionDays", "MaxAgePruneFraction",
 	"CameraDownAlertMinutes", "CameraDownRepeatHours", "StopTimeoutSeconds",
-	"LiveViewEnabled", "LiveUdpAddress", "LiveAdvertiseHosts", "LiveSubStream", "LiveCloseAfterSeconds",
+	"LiveViewEnabled", "LiveUdpAddress", "LiveAdvertiseHosts", "LiveAdvertiseRemoteHost", "LiveSubStream", "LiveCloseAfterSeconds",
 	"logging.level", "logging.levels.*",
 	"alerts.queueSize", "alerts.timeoutSeconds", "alerts.minRepeatSeconds", "alerts.retryBackoffSeconds",
 	"alerts.webhook.enabled", "alerts.webhook.url", "alerts.webhook.secretName", "alerts.webhook.secretHeader",

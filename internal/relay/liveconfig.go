@@ -9,8 +9,8 @@ import (
 
 // LiveInputs is everything the live instance's config depends on. Config supplies RelayBase (the
 // main paths read the recording relay), LiveWhepAddress, LiveUdpAddress, LiveAdvertiseHosts,
-// LiveSubStream and LiveCloseAfterSeconds, already validated by config.Load: the address and host
-// rules live there and are not repeated here. Login is the camlive login.
+// LiveAdvertiseRemoteHost with Web.RemoteHost, LiveSubStream and LiveCloseAfterSeconds, already
+// validated by config.Load: the address and host rules live there and are not repeated here. Login is the camlive login.
 type LiveInputs struct {
 	Config  config.Config
 	Cameras []config.Camera
@@ -30,6 +30,10 @@ func LiveConfig(in LiveInputs) ([]byte, error) {
 		return nil, err
 	}
 	hosts := append([]string{"127.0.0.1"}, cfg.LiveAdvertiseHosts...)
+	if cfg.LiveAdvertiseRemoteHost {
+		// a name, not an address: MediaMTX resolves it at each session, so a new public IP needs no restart
+		hosts = append(hosts, cfg.Web.RemoteHost)
+	}
 	for _, v := range append([]string{cfg.LiveWhepAddress, cfg.LiveUdpAddress}, hosts...) {
 		if err := checkScalar("live address", v); err != nil {
 			return nil, err

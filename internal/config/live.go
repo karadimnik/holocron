@@ -59,6 +59,7 @@ func (d *decoder) live(c *Config) {
 	d.str("LiveSecretPath", &c.LiveSecretPath)
 	d.str("LiveWhepAddress", &c.LiveWhepAddress)
 	d.str("LiveUdpAddress", &c.LiveUdpAddress)
+	d.boolean("LiveAdvertiseRemoteHost", &c.LiveAdvertiseRemoteHost)
 	d.str("LiveSubStream", &c.LiveSubStream)
 	d.integer("LiveCloseAfterSeconds", &c.LiveCloseAfterSeconds, 1)
 	if _, ok := d.raw["LiveCloseAfterSeconds"]; ok && !d.lastProblemOn("LiveCloseAfterSeconds") && c.LiveCloseAfterSeconds > 3600 {
@@ -145,6 +146,21 @@ func (d *decoder) live(c *Config) {
 		if hp, err := HostPort(k.url); err == nil && hp == c.LiveWhepAddress {
 			d.problem("LiveWhepAddress", "'%s' is the address of the recording relay (%s)", c.LiveWhepAddress, k.key)
 		}
+	}
+}
+
+// liveRemoteHost: LiveAdvertiseRemoteHost offers web.remoteHost for video, so it needs that name
+// and a media port a router can forward to. Judged after the web object is decoded.
+func (d *decoder) liveRemoteHost(c *Config) {
+	if !c.LiveAdvertiseRemoteHost || d.hasProblemUnder("Live") || d.hasProblemUnder("web.remoteHost") {
+		return
+	}
+	if c.Web.RemoteHost == "" {
+		d.problem("LiveAdvertiseRemoteHost", "needs web.remoteHost: it offers that name to browsers for video. Set web.remoteHost (remote access) or set LiveAdvertiseRemoteHost back to false.")
+		return
+	}
+	if strings.HasPrefix(c.LiveUdpAddress, "127.0.0.1:") {
+		d.problem("LiveAdvertiseRemoteHost", "needs LiveUdpAddress beyond loopback: a router cannot forward to '%s'. Use 0.0.0.0:<port> or this PC's private IPv4 and port (and list it in LiveAdvertiseHosts).", c.LiveUdpAddress)
 	}
 }
 

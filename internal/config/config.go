@@ -63,15 +63,18 @@ type Config struct {
 	StartStaggerMs          int
 
 	// Live view
-	LiveViewEnabled       bool
-	LiveExePath           string
-	LiveConfigPath        string
-	LiveWhepAddress       string
-	LiveUdpAddress        string
-	LiveAdvertiseHosts    []string
-	LiveSubStream         string
-	LiveCloseAfterSeconds int
-	LiveSecretPath        string
+	LiveViewEnabled    bool
+	LiveExePath        string
+	LiveConfigPath     string
+	LiveWhepAddress    string
+	LiveUdpAddress     string
+	LiveAdvertiseHosts []string
+	// LiveAdvertiseRemoteHost also offers Web.RemoteHost to browsers for video (MediaMTX resolves
+	// the name at each session), so a viewer outside the home network can receive it.
+	LiveAdvertiseRemoteHost bool
+	LiveSubStream           string
+	LiveCloseAfterSeconds   int
+	LiveSecretPath          string
 
 	// Logging (new in holocron; LLD 2.13)
 	Logging Logging

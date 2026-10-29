@@ -256,6 +256,9 @@ func TestValidationClasses(t *testing.T) {
 		{"advertise too many", `{"LiveUdpAddress":"0.0.0.0:8189","LiveAdvertiseHosts":["10.0.0.1","10.0.0.2","10.0.0.3","10.0.0.4","10.0.0.5"]}`, "LiveAdvertiseHosts", "at most 4"},
 		{"advertise other than bound", `{"LiveUdpAddress":"10.0.0.1:8189","LiveAdvertiseHosts":["10.0.0.2"]}`, "LiveAdvertiseHosts", "only 10.0.0.1"},
 		{"advertise not array", `{"LiveAdvertiseHosts":"10.0.0.1"}`, "LiveAdvertiseHosts", "array"},
+		{"remote host not a boolean", `{"LiveAdvertiseRemoteHost":"yes"}`, "LiveAdvertiseRemoteHost", "boolean"},
+		{"remote host without web.remoteHost", `{"LiveAdvertiseRemoteHost":true,"LiveUdpAddress":"0.0.0.0:8189","LiveAdvertiseHosts":["192.168.1.50"]}`, "LiveAdvertiseRemoteHost", "needs web.remoteHost"},
+		{"remote host with loopback udp", `{"LiveAdvertiseRemoteHost":true,"web":{"tlsListen":"192.168.1.50:8443","remoteHost":"remote.example.org"}}`, "LiveAdvertiseRemoteHost", "a router cannot forward to '127.0.0.1:8189'"},
 		{"substream bad", `{"LiveSubStream":"stream 2"}`, "LiveSubStream", "stream name"},
 		{"close after 0", `{"LiveCloseAfterSeconds":0}`, "LiveCloseAfterSeconds", "at least 1"},
 		{"close after 3601", `{"LiveCloseAfterSeconds":3601}`, "LiveCloseAfterSeconds", "1 to 3600"},
@@ -284,6 +287,9 @@ func TestValidationClasses(t *testing.T) {
 	good := []string{
 		`{"RootPath":"/srv/cams"}`, `{"MaxAgePruneFraction":1.0}`, `{"MaxAgePruneFraction":0.5}`, `{"MaxAgePruneFraction":0.01}`, `{"MaxRetentionDays":null}`, `{"StallFactor":1.01}`,
 		`{"LiveViewEnabled":true,"LiveUdpAddress":"0.0.0.0:8189","LiveAdvertiseHosts":["192.168.1.50","10.0.0.2"]}`,
+		`{"LiveAdvertiseRemoteHost":true,"LiveUdpAddress":"0.0.0.0:8189","LiveAdvertiseHosts":["192.168.1.50"],"web":{"tlsListen":"192.168.1.50:8443","remoteHost":"remote.example.org"}}`,
+		`{"LiveAdvertiseRemoteHost":true,"LiveUdpAddress":"192.168.1.50:8189","LiveAdvertiseHosts":["192.168.1.50"],"web":{"tlsListen":"192.168.1.50:8443","remoteHost":"remote.example.org"}}`,
+		`{"LiveAdvertiseRemoteHost":false,"web":{"tlsListen":"192.168.1.50:8443","remoteHost":"remote.example.org"}}`,
 		`{"LiveAdvertiseHosts":null}`, `{"LiveCloseAfterSeconds":3600}`, `{"RtspTransport":"udp"}`,
 		`{"Container":"fmp4"}`, `{"ContainerProfiles":{"x":{"Extension":".ts","SegmentFormat":"mpegts"}},"Container":"X"}`,
 	}
