@@ -412,7 +412,8 @@ func TestCameraNoteWording(t *testing.T) {
 		`let words = "the recorder reported: " + message;`,
 		`(alive ? "Restarted automatically; recording resumed." : "Not recording now.")`,
 		`const NOTE_VISIBLE_MS = 24 * 3600 * 1000;`,
-		`const quiet = alive && at !== null && now - at.getTime() > NOTE_VISIBLE_MS;`,
+		`const quiet = cam.Record === false || (alive && at !== null && now - at.getTime() > NOTE_VISIBLE_MS);`,
+		`if (cam.RestartsLastHour >= 3) return chip("ser", "Unstable");`,
 		`'<div class="cnote' + (alive ? "" : " bad") + '" title="' + esc(raw) + '">`,
 		`"><summary>Details</summary>" + (quiet ? "<p>" + esc(sentence) + "</p>" : "") + "<code>" + esc(raw) + "</code></details>"`,
 	} {

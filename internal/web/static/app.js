@@ -205,7 +205,9 @@ function cameraChip(cam, live) {
   if (!live) return chip("off", "Stopped");
   if (!cam.Record) return chip("off", "Not recording");
   if (!cam.Alive) return chip("crit", "Camera offline");
-  if (cam.RestartsLastHour > 0) return chip("ser", "Recovering");
+  // One or two restarts in the hour are handled by the supervisor and told by the camera note; three or more
+  // (the doctor warns at 3) mean the camera or the stream is not holding.
+  if (cam.RestartsLastHour >= 3) return chip("ser", "Unstable");
   return chip("good", "Recording");
 }
 
@@ -280,7 +282,8 @@ function cameraNote(cam, open) {
   const alive = !!cam.Alive;
   const now = Date.now();
   const sentence = noteSentence(raw, at, alive, now);
-  const quiet = alive && at !== null && now - at.getTime() > NOTE_VISIBLE_MS;
+  // A camera the Operator switched off on purpose, or an old hiccup on a camera that is recording, is not news.
+  const quiet = cam.Record === false || (alive && at !== null && now - at.getTime() > NOTE_VISIBLE_MS);
   const key = cam.Name + "|" + (cam.LastErrorAt || "") + "|" + raw;
   const details = '<details class="cnote-more" data-key="' + esc(key) + '"' + (open.has(key) ? " open" : "") +
     "><summary>Details</summary>" + (quiet ? "<p>" + esc(sentence) + "</p>" : "") + "<code>" + esc(raw) + "</code></details>";
