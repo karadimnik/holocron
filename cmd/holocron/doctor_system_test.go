@@ -3,6 +3,7 @@ package main
 import (
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -158,7 +159,7 @@ func TestDoctorIncidentSandboxVariableRefusesTheRoot(t *testing.T) {
 	r.doctorTools(nil)
 	out, _, code := r.run("doctor")
 	want := "fail sandbox guard  refused by the sandbox guard (HOLOCRON_SANDBOX_ONLY=1)"
-	if code != 1 || !strings.HasPrefix(out, "== setup ==\n"+want) || !strings.Contains(out, "     fix: "+envFix(app.SandboxEnv)+" (it is for tests; then run holocron doctor again)") || !strings.HasSuffix(out, "BROKEN (1 failure(s))\n") {
+	if code != 1 || !strings.HasPrefix(out, "holocron "+version+" ("+runtime.GOOS+"/"+runtime.GOARCH+")\n== setup ==\n"+want) || !strings.Contains(out, "     fix: "+envFix(app.SandboxEnv)+" (it is for tests; then run holocron doctor again)") || !strings.HasSuffix(out, "BROKEN (1 failure(s))\n") {
 		t.Fatalf("exit %d:\n%s", code, out)
 	}
 	if _, err := os.Stat(r.root); !os.IsNotExist(err) {

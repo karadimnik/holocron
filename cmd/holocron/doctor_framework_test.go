@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strconv"
 	"strings"
 	"testing"
@@ -23,10 +24,11 @@ func TestDoctorJSONIsOneDocumentWithTheSchemaFields(t *testing.T) {
 	r.doctorTools(nil)
 	out, _, code := r.run("doctor", "--json")
 	var rep struct {
-		Schema int      `json:"schema"`
-		Root   string   `json:"root"`
-		Groups []string `json:"groups"`
-		Checks []struct {
+		Schema  int      `json:"schema"`
+		Version string   `json:"version"`
+		Root    string   `json:"root"`
+		Groups  []string `json:"groups"`
+		Checks  []struct {
 			ID, Group, Level, Title, Detail, Fix string
 			Data                                 any
 		} `json:"checks"`
@@ -45,7 +47,7 @@ func TestDoctorJSONIsOneDocumentWithTheSchemaFields(t *testing.T) {
 	if dec.More() {
 		t.Fatalf("more than one document:\n%s", out)
 	}
-	if rep.Schema != 1 || rep.Root != r.root || strings.Join(rep.Groups, ",") != strings.Join(doctorGroups, ",") || len(rep.Checks) == 0 {
+	if rep.Schema != 1 || rep.Version != version || rep.Root != r.root || strings.Join(rep.Groups, ",") != strings.Join(doctorGroups, ",") || len(rep.Checks) == 0 {
 		t.Fatalf("report: %+v", rep)
 	}
 	n := 0
@@ -62,6 +64,38 @@ func TestDoctorJSONIsOneDocumentWithTheSchemaFields(t *testing.T) {
 	if s.OK+s.Info+s.Warnings+s.Failures != n || s.Verdict == "" || (code == 0) != (s.Failures == 0) {
 		t.Errorf("summary %+v for %d checks, exit %d", s, n, code)
 	}
+}
+
+// The text output names the running build on its first line; --quiet stays the problems and the verdict.
+func TestDoctorFirstLineNamesTheVersion(t *testing.T) {
+	setVersion(t, "v9.9.9")
+	r := newRig(t)
+	r.doctorTools(nil)
+	out, _, _ := r.run("doctor", "--group", "setup")
+	if first, _, _ := strings.Cut(out, "\n"); first != "holocron v9.9.9 ("+runtime.GOOS+"/"+runtime.GOARCH+")" {
+		t.Errorf("first line %q:\n%s", first, out)
+	}
+	if out, _, _ := r.run("doctor", "--group", "setup", "--quiet"); strings.Contains(out, "v9.9.9") {
+		t.Errorf("--quiet names the version:\n%s", out)
+	}
+	if out, _, _ := r.run("doctor", "--setup-only"); strings.Contains(out, "v9.9.9") {
+		t.Errorf("--setup-only changed:\n%s", out)
+	}
+	j, _, _ := r.run("doctor", "--group", "setup", "--json")
+	var doc struct {
+		Schema  int
+		Version string
+	}
+	if err := json.Unmarshal([]byte(j), &doc); err != nil || doc.Schema != 1 || doc.Version != "v9.9.9" {
+		t.Errorf("--json: %+v %v", doc, err)
+	}
+}
+
+// setVersion stands in for the -X main.version build flag for one test.
+func setVersion(t *testing.T, v string) {
+	old := version
+	version = v
+	t.Cleanup(func() { version = old })
 }
 
 func TestDoctorExitCodeFollowsFailuresNotWarnings(t *testing.T) {

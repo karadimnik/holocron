@@ -20,6 +20,10 @@ A version is `MAJOR.MINOR.PATCH`, tagged `vMAJOR.MINOR.PATCH`. The public interf
 
 ## [Unreleased]
 
+### Added
+
+- Terminal: `holocron status` and `holocron doctor` name the running version on their first line (`holocron v1.1.2 status - root E:\cameras`, `holocron v1.1.2 (windows/amd64)`), and `holocron doctor --json` has a top-level `version`; `holocron help` already did.
+
 ## [1.1.2] - 2026-10-29
 
 ### Changed

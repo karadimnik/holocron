@@ -35,6 +35,21 @@ func TestEveryCommandHasHelp(t *testing.T) {
 	}
 }
 
+// The command list, also printed by a bare `holocron`, opens with the running build's version.
+func TestHelpHeaderNamesTheVersion(t *testing.T) {
+	setVersion(t, "v9.9.9")
+	r := newRig(t)
+	for _, args := range [][]string{{"help"}, {"--help"}} {
+		out, _, _ := r.run(args...)
+		if !strings.HasPrefix(out, "holocron v9.9.9 - the one executable of the Holocron NVR\n") {
+			t.Errorf("%v:\n%s", args, out)
+		}
+	}
+	if out, _, code := r.run(); code != exitUsage || !strings.HasPrefix(out, "holocron v9.9.9 - ") {
+		t.Errorf("bare holocron: exit %d:\n%s", code, out)
+	}
+}
+
 func TestHelpOfAnUnknownCommandIsAUsageError(t *testing.T) {
 	r := newRig(t)
 	for _, args := range [][]string{{"help", "bogus"}, {"bogus", "--help"}, {"--help", "bogus"}, {"help", "cam", "bogus"}, {"help", "up", "extra"}} {
