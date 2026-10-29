@@ -20,6 +20,10 @@ A version is `MAJOR.MINOR.PATCH`, tagged `vMAJOR.MINOR.PATCH`. The public interf
 
 ## [Unreleased]
 
+### Fixed
+
+- `holocron doctor`: the `recording.segment` check no longer warns at every sunrise and sunset, when a camera switches between its infrared night and colour day profiles and its bitrate changes 3 to 4 times; it now judges the newest closed segment against the camera's closed segments of the last 24 h (a warning below half the lowest rate, a stalled or black stream, or above 1.5 times the peak rate, a runaway) instead of the median of 2 h, which is still shown; an empty closed segment warns ("no data") and is never part of the baseline. The JSON data adds `peakRatio`, `lowestRatio` and `peakCompared`.
+
 ## [1.1.0] - 2026-10-29
 
 ### Changed

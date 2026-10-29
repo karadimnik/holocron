@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"slices"
 	"sort"
 	"strings"
 	"time"
@@ -452,9 +453,13 @@ func recGaps(_ context.Context, r *drun) []check {
 	return cs
 }
 
-// recSegments: the newest closed segment against the camera's closed segments of the last 2 h, by
-// bytes per second (a segment cut short by a restart is short, not broken); with --deep, ffprobe
-// says whether it holds video and pcm_alaw audio.
+// recSegments: the newest closed segment by bytes per second (a segment cut short by a restart is
+// short, not broken) against the camera's other closed segments of the last 24 h: it warns below
+// half their lowest rate or above 1.5 times their peak. An IP camera switches between an infrared
+// night profile and a colour day profile at dawn and dusk and its rate changes 3 to 4 times within
+// an hour or two, so only a baseline spanning the whole day holds a healthy camera's range; the
+// median of the last 2 h is reported, not judged. With --deep, ffprobe says whether the segment
+// holds video and pcm_alaw audio.
 func recSegments(ctx context.Context, r *drun) []check {
 	cams, _ := r.enabled()
 	var cs []check
@@ -472,24 +477,56 @@ func recSegments(ctx context.Context, r *drun) []check {
 				last = c
 			}
 		}
-		var rates []float64
+		rate := func(s segFile) (float64, bool) {
+			d := s.MTime.Sub(s.Start).Seconds()
+			return float64(s.Size) / d, d >= 10
+		}
+		// recent includes last, as the median always has; day does not. Neither holds a segment
+		// without data (an ffmpeg crash can leave an empty file): both are divisors.
+		var recent, day []float64
 		for _, c := range closed {
-			if d := c.MTime.Sub(c.Start).Seconds(); d >= 10 && r.now.Sub(c.MTime) <= 2*time.Hour {
-				rates = append(rates, float64(c.Size)/d)
+			v, ok := rate(c)
+			if !ok || v == 0 {
+				continue
+			}
+			age := r.now.Sub(c.MTime)
+			if age <= 2*time.Hour {
+				recent = append(recent, v)
+			}
+			if c.Path != last.Path && age <= 24*time.Hour {
+				day = append(day, v)
 			}
 		}
-		dur := last.MTime.Sub(last.Start).Seconds()
-		data := map[string]any{"camera": cam.Name, "segment": last.Name, "bytes": last.Size, "compared": len(rates)}
+		v, long := rate(last)
+		data := map[string]any{"camera": cam.Name, "segment": last.Name, "bytes": last.Size, "compared": len(recent), "peakCompared": len(day)}
 		var c check
 		switch {
-		case len(rates) < 3 || dur < 10:
-			c = mk(lvOK, cam.Name, "%s %s; fewer than 3 closed segments of the last 2 h to compare", last.Name, kb(last.Size))
+		case long && last.Size == 0:
+			data["ratio"], data["peakRatio"], data["lowestRatio"] = 0.0, 0.0, 0.0
+			c = mk(lvWarn, cam.Name, "%s 0 B; no data in %s, far below any rate", last.Name, secs(last.MTime.Sub(last.Start))).
+				fix("holocron doctor --deep --group recording ; %s", camFix(cam, safe))
+		case len(day) < 3 || !long:
+			c = mk(lvOK, cam.Name, "%s %s; fewer than 3 closed segments of the last 24 h to compare", last.Name, kb(last.Size))
 		default:
-			sort.Float64s(rates)
-			ratio := float64(last.Size) / dur / rates[len(rates)/2]
-			data["ratio"] = ratio
-			c = mk(lvOK, cam.Name, "%s %s, %.0f%% of the median rate of %d closed segment(s) of the last 2 h", last.Name, kb(last.Size), ratio*100, len(rates))
-			if ratio < 0.5 || ratio > 1.5 {
+			text := last.Name + " " + kb(last.Size) + ","
+			if len(recent) >= 3 {
+				sort.Float64s(recent)
+				ratio := v / recent[len(recent)/2]
+				data["ratio"] = ratio
+				text += fmt.Sprintf(" %.0f%% of the median rate of %d closed segment(s) of the last 2 h,", ratio*100, len(recent))
+			}
+			peak, lowest := v/slices.Max(day), v/slices.Min(day)
+			data["peakRatio"], data["lowestRatio"] = peak, lowest
+			text += fmt.Sprintf(" %.0f%% of the 24 h peak rate and %.0f%% of the 24 h lowest rate (%d closed segment(s))", peak*100, lowest*100, len(day))
+			var side string
+			switch {
+			case peak > 1.5:
+				side = "; far above the 24 h peak rate (limit 150%)"
+			case lowest < 0.5:
+				side = "; far below the 24 h lowest rate (limit 50%)"
+			}
+			c = mk(lvOK, cam.Name, "%s%s", text, side)
+			if side != "" {
 				c.Level = lvWarn
 				c = c.fix("holocron doctor --deep --group recording ; %s", camFix(cam, safe))
 			}
