@@ -44,7 +44,7 @@ Every tab, explained: [the web app](docs/ui.md).
 | --- | --- | --- | --- |
 | Windows | amd64 | **In production**: records 24/7 since 22 Oct 2026. Tested in CI on `windows-latest`. | logon task (default); Windows service mode tested only against a fake service manager |
 | Linux | amd64, arm64 | Built and tested in CI on `ubuntu-latest`, including the real-ffmpeg and real-process suites. Not yet run in production. | systemd user unit, exercised in WSL2 only |
-| macOS | arm64 (Apple silicon) | Built and tested in CI on `macos-latest`, report-only (that job cannot fail a run). Not used outside CI. | launchd agent, untested on a Mac |
+| macOS | arm64 (Apple silicon), amd64 (Intel) | arm64: built and tested in CI on `macos-latest`, report-only (that job cannot fail a run). amd64: cross-built in CI and run at most through the start-up check; never tested in CI or on a Mac by the author. | launchd agent, untested on a Mac |
 
 **Browsers and devices.** Tested by the author: a Windows PC (Firefox) and an Android phone (Firefox for Android), including live video over the internet on 5G through remote access. **Not tested: iPhone and iPad (any browser on iOS).** Details: [docs/ui.md](docs/ui.md#tested-clients).
 
@@ -64,7 +64,7 @@ The arm64 Linux build is cross-compiled; its tests run on amd64. Every known lim
 
 ### Download a release
 
-Get the archive for your platform from the [latest release](https://github.com/karadimnik/holocron/releases/latest). `<version>` is the tag without its `v` (tag `v1.3.2`, file `holocron_1.3.2_linux_amd64.tar.gz`).
+Get the archive for your platform from the [latest release](https://github.com/karadimnik/holocron/releases/latest). `<version>` is the tag without its `v` (tag `v1.4.0`, file `holocron_1.4.0_linux_amd64.tar.gz`).
 
 | Platform | Archive |
 | --- | --- |
@@ -72,13 +72,16 @@ Get the archive for your platform from the [latest release](https://github.com/k
 | Linux x64 | `holocron_<version>_linux_amd64.tar.gz` |
 | Linux ARM64 | `holocron_<version>_linux_arm64.tar.gz` |
 | macOS Apple silicon | `holocron_<version>_darwin_arm64.tar.gz` |
+| macOS Intel | `holocron_<version>_darwin_amd64.tar.gz` |
+
+Not sure which Mac you have? Run `uname -m` in Terminal: `arm64` is Apple silicon, `x86_64` is Intel. Running the wrong archive fails with `bad CPU type in executable`. On macOS, a file downloaded in a browser is quarantined: run `xattr -d com.apple.quarantine holocron` once if Gatekeeper refuses it.
 
 Each archive holds the executable, `LICENSE`, `README.md` and `docs/holocron-quickstart.md`, and has an SPDX SBOM beside it (`<archive>.sbom.json`); `checksums.txt` lists the SHA-256 of every file. Download, verify and unpack:
 
 ```bash
 # Linux and macOS
-VERSION=1.3.2                                   # the version you want
-FILE=holocron_${VERSION}_linux_amd64.tar.gz     # or linux_arm64, darwin_arm64
+VERSION=1.4.0                                   # the version you want
+FILE=holocron_${VERSION}_linux_amd64.tar.gz     # or linux_arm64, darwin_arm64, darwin_amd64
 BASE=https://github.com/karadimnik/holocron/releases/download/v$VERSION
 curl -fsSL -O "$BASE/$FILE" -O "$BASE/checksums.txt"
 grep "  $FILE\$" checksums.txt | sha256sum -c    # macOS: shasum -a 256 -c
@@ -88,7 +91,7 @@ tar -xzf "$FILE"
 
 ```powershell
 # Windows PowerShell
-$Version = "1.3.2"
+$Version = "1.4.0"
 $File = "holocron_${Version}_windows_amd64.zip"
 $Base = "https://github.com/karadimnik/holocron/releases/download/v$Version"
 Invoke-WebRequest "$Base/$File" -OutFile $File
@@ -107,6 +110,7 @@ git clone https://github.com/karadimnik/holocron.git && cd holocron
 go build ./cmd/holocron                             # this OS; no third-party dependencies
 GOOS=linux GOARCH=arm64 go build ./cmd/holocron     # cross-compile any released target
 ./build-holocron.sh                                 # developer build: gofmt, vet and tests, then holocron.exe (windows/amd64)
+                                                    # (it always builds the Windows exe; on a Mac use go build, above)
 ```
 
 More: [building and testing](docs/development.md).

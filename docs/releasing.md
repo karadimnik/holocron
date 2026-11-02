@@ -24,7 +24,7 @@ For version `X.Y.Z` (tag `vX.Y.Z`):
 | Asset | What it is |
 | --- | --- |
 | `holocron_X.Y.Z_windows_amd64.zip` | `holocron.exe`, `LICENSE`, `README.md`, `docs/holocron-quickstart.md` |
-| `holocron_X.Y.Z_linux_amd64.tar.gz`, `holocron_X.Y.Z_linux_arm64.tar.gz`, `holocron_X.Y.Z_darwin_arm64.tar.gz` | `holocron` and the same three documents |
+| `holocron_X.Y.Z_linux_amd64.tar.gz`, `holocron_X.Y.Z_linux_arm64.tar.gz`, `holocron_X.Y.Z_darwin_arm64.tar.gz`, `holocron_X.Y.Z_darwin_amd64.tar.gz` | `holocron` and the same three documents |
 | `holocron_X.Y.Z_<os>_<arch>.<ext>.sbom.json` | an SPDX 2.3 JSON software bill of materials of each archive, made by Syft |
 | `checksums.txt` | the SHA-256 of every archive and SBOM, in `sha256sum` format |
 
@@ -97,6 +97,6 @@ There is no separate cosign signature: the attestation is already a Sigstore sig
 ## Limitations
 
 - **Windows**: `holocron.exe` is not Authenticode-signed, so SmartScreen may warn when it is first run from a download.
-- **macOS**: the binary is not signed or notarized, so Gatekeeper may refuse to open it from a download.
+- **macOS**: the binary is not signed or notarized, so Gatekeeper may refuse to open it from a download; `xattr -d com.apple.quarantine holocron` clears the browser's quarantine flag. The Intel (`darwin_amd64`) archive is cross-compiled on Linux and has never been run by the author.
 - **Linux and macOS** builds are compiled and tested in CI only; the live system runs on Windows.
 - Reproducing a release elsewhere needs the Go version it was built with (`go version -m holocron` prints it) and the GoReleaser version pinned in `release.yml`. Rebuilding a published release and comparing checksums is UNVERIFIED: no release has been made by this pipeline yet.

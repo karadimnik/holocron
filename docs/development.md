@@ -6,7 +6,7 @@ Mechanics that matter when you are working on this repository rather than using 
 
 - **Go version**: the one `go.mod` names (`go 1.27`). There are no third-party dependencies, so there is no `go.sum`. On the development machine Go lives in `~/.local/go/bin` inside WSL; `build-holocron.sh` puts that folder on `PATH` itself.
 - **`./build-holocron.sh`** (WSL or Linux, from the repository root) is the release build: it fails on any file `gofmt -l cmd internal` lists, then runs `go vet ./...` and `go test -p 1 ./...` (one package at a time, because the web and real-process suites are heavy), and only then cross-compiles `holocron.exe` for `windows/amd64` into the repository root, stamping the version from `git describe --tags --always --dirty` into `main.version` and `internal/web.version`. A build that completes is a build that passed.
-- **Other targets**: `GOOS=linux go build ./cmd/holocron` and so on. CI cross-builds `windows/amd64`, `linux/amd64`, `linux/arm64` and `darwin/arm64` ([ci.md](ci.md)).
+- **Other targets**: `GOOS=linux go build ./cmd/holocron` and so on. CI cross-builds `windows/amd64`, `linux/amd64`, `linux/arm64`, `darwin/arm64` and `darwin/amd64` ([ci.md](ci.md)).
 - **Runtime tools are not built here.** Holocron runs `ffmpeg`, `ffprobe` and MediaMTX as child processes. Defaults (internal/config/config.go): on Windows `C:\ffmpeg\bin\ffmpeg.exe`, `C:\ffmpeg\bin\ffprobe.exe` and `C:\mediamtx\mediamtx.exe` (configs `C:\mediamtx\mediamtx.yml` and `mediamtx-live.yml`); elsewhere `ffmpeg`, `ffprobe` and `mediamtx` from `PATH`. The keys are `FfmpegPath`, `FfprobePath` and `RestreamerExePath` ([internal/config/KEYS.md](../internal/config/KEYS.md)); `holocron doctor` checks ffmpeg and MediaMTX (`setup.ffmpeg`, `setup.mediamtx`).
 
 ## Testing

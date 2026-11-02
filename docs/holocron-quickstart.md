@@ -11,7 +11,7 @@ Download and verify the archive for your system as in [Download a release](../RE
 ```bash
 mkdir -p ~/.local/bin && install -m 0755 holocron ~/.local/bin/holocron    # put ~/.local/bin on PATH if it is not
 holocron version
-# holocron <version> (status.json schema 1, linux/amd64, go<n>)            macOS: darwin/arm64
+# holocron <version> (status.json schema 1, linux/amd64, go<n>)            macOS: darwin/arm64 or darwin/amd64
 ```
 
 ```powershell

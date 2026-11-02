@@ -166,7 +166,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        target: [windows/amd64, linux/amd64, linux/arm64, darwin/arm64]
+        target: [windows/amd64, linux/amd64, linux/arm64, darwin/arm64, darwin/amd64]
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -207,7 +207,7 @@ jobs:
       - name: Archives, checksums and version
         run: |
           version="$(jq -r .version dist/metadata.json)"
-          for t in windows_amd64.zip linux_amd64.tar.gz linux_arm64.tar.gz darwin_arm64.tar.gz; do
+          for t in windows_amd64.zip linux_amd64.tar.gz linux_arm64.tar.gz darwin_arm64.tar.gz darwin_amd64.tar.gz; do
             f="dist/holocron_${version}_$t"
             test -s "$f" || { echo "::error::$f is missing"; exit 1; }
             test -s "$f.sbom.json" || { echo "::error::$f.sbom.json is missing"; exit 1; }

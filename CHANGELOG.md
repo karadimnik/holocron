@@ -20,6 +20,12 @@ A version is `MAJOR.MINOR.PATCH`, tagged `vMAJOR.MINOR.PATCH`. The public interf
 
 ## [Unreleased]
 
+## [1.4.0] - 2026-11-02
+
+### Added
+
+- A macOS Intel release archive, `holocron_<version>_darwin_amd64.tar.gz` (with its SBOM and checksum). Until now only Apple silicon was published, and the arm64 binary fails on an Intel Mac with `bad CPU type in executable`. The README says how to tell which Mac you have (`uname -m`) and how to clear the Gatekeeper quarantine flag. The Intel build is cross-compiled in CI and has not been run on an Intel Mac by the author.
+
 ## [1.3.2] - 2026-10-29
 
 ### Changed
@@ -106,7 +112,8 @@ The first version of Holocron in its own repository: a Go network video recorder
 - Builds for Windows (first-class and live), Linux and macOS, cross-compiled and tested in CI.
 - Licence: [PolyForm Noncommercial License 1.0.0](LICENSE) (decision D22).
 
-[Unreleased]: https://github.com/karadimnik/holocron/compare/v1.3.2...HEAD
+[Unreleased]: https://github.com/karadimnik/holocron/compare/v1.4.0...HEAD
+[1.4.0]: https://github.com/karadimnik/holocron/compare/v1.3.2...v1.4.0
 [1.3.2]: https://github.com/karadimnik/holocron/compare/v1.3.1...v1.3.2
 [1.3.1]: https://github.com/karadimnik/holocron/compare/v1.3.0...v1.3.1
 [1.3.0]: https://github.com/karadimnik/holocron/compare/v1.1.2...v1.3.0
