@@ -20,6 +20,10 @@ A version is `MAJOR.MINOR.PATCH`, tagged `vMAJOR.MINOR.PATCH`. The public interf
 
 ## [Unreleased]
 
+### Added
+
+- `holocron doctor` checks the camera list (`setup.cameras`): it reads `cameras.json` as the supervisor does and fails when the file does not exist (fix: `holocron cam add --name N --ip HOST --record`) or is invalid (the message `holocron config validate` prints), warns when the list is empty, and says how many cameras it holds otherwise. Before, doctor said `ok configuration` for a setup that `holocron up` then refused (exit 21).
+
 ## [1.4.1] - 2026-11-02
 
 ### Fixed
