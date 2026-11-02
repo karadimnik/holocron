@@ -22,14 +22,15 @@ import (
 type discoverDeps struct {
 	dial          func(ctx context.Context, network, addr string) (net.Conn, error)
 	table         lan.Table
-	interfaces    func() ([]netip.Prefix, error)
+	interfaces    func() ([]lan.IfaceAddr, error)
+	routes        lan.Routes
 	timeout       time.Duration // per address and port
 	inFlight      int           // probes at once
 	allowLoopback bool          // tests only: --subnet may name 127.0.0.0/8
 }
 
 func newDiscoverDeps(e *env) *discoverDeps {
-	d := &discoverDeps{dial: (&net.Dialer{}).DialContext, table: lan.System(), interfaces: lan.InterfaceAddrs, timeout: 800 * time.Millisecond, inFlight: 64}
+	d := &discoverDeps{dial: (&net.Dialer{}).DialContext, table: lan.System(), interfaces: lan.InterfaceAddrs, routes: lan.SystemRoutes(), timeout: 800 * time.Millisecond, inFlight: 64}
 	if e.discover != nil {
 		e.discover(d)
 	}
@@ -40,6 +41,7 @@ func newDiscoverDeps(e *env) *discoverDeps {
 type discoverReport struct {
 	Schema         int              `json:"schema"`
 	Subnets        []string         `json:"subnets"`
+	Considered     []lan.Considered `json:"considered"`
 	Ports          []int            `json:"ports"`
 	Addresses      int              `json:"addresses"`
 	DurationMs     int64            `json:"durationMs"`
@@ -101,7 +103,7 @@ type found struct {
 func cmdCamDiscover(ctx context.Context, e *env) error {
 	fs := newFlags(e, "cam discover")
 	var subnets []string
-	fs.Func("subnet", "a private IPv4 subnet to scan, CIDR (repeatable; default: this host's own)", func(s string) error { subnets = append(subnets, s); return nil })
+	fs.Func("subnet", "a private IPv4 subnet to scan, CIDR (repeatable; default: the LAN this host is on, found by its default route)", func(s string) error { subnets = append(subnets, s); return nil })
 	saveMACs := fs.Bool("save-macs", false, "store the MAC of each camera that answers at its address (without it: a dry run)")
 	apply := fs.Bool("apply", false, "set the new address of each camera that moved (without it: a dry run)")
 	pos, err := parseFlags(fs, e.args)
@@ -112,8 +114,8 @@ func cmdCamDiscover(ctx context.Context, e *env) error {
 		return err
 	}
 	d := newDiscoverDeps(e)
-	rep := &discoverReport{Schema: 1, DryRun: !*apply && !*saveMACs, Notes: []string{}, Cameras: []discoverCamera{}, Devices: []discoverDevice{}, Changes: []discoverChange{}}
-	nets, self, err := discoverSubnets(d, subnets, rep)
+	rep := &discoverReport{Schema: 1, DryRun: !*apply && !*saveMACs, Considered: []lan.Considered{}, Notes: []string{}, Cameras: []discoverCamera{}, Devices: []discoverDevice{}, Changes: []discoverChange{}}
+	nets, self, err := discoverSubnets(ctx, d, subnets, rep)
 	if err != nil {
 		return err
 	}
@@ -128,6 +130,9 @@ func cmdCamDiscover(ctx context.Context, e *env) error {
 	rep.Ports = discoverPorts(cams.List)
 	rep.Addresses = len(hosts)
 	if !e.json {
+		if len(rep.Considered) > 0 {
+			fmt.Fprintf(e.out, "no --subnet given; the networks of this host:\n%s", considerationLines(rep.Considered))
+		}
 		fmt.Fprintf(e.out, "scanning %s: %d address(es), TCP %s, %d ms each, %d at a time\n", strings.Join(rep.Subnets, ", "), len(hosts), joinInts(rep.Ports), d.timeout.Milliseconds(), d.inFlight)
 	}
 	start := time.Now()
@@ -177,13 +182,15 @@ func cmdCamDiscover(ctx context.Context, e *env) error {
 	return nil
 }
 
-// discoverSubnets is the --subnet values, or this host's private networks; self is this host's own
-// addresses (never probed).
-func discoverSubnets(d *discoverDeps, values []string, rep *discoverReport) ([]netip.Prefix, map[netip.Addr]bool, error) {
+// discoverSubnets is the --subnet values, or the LAN(s) this host is on (lan.Select); self is this
+// host's own addresses (never probed).
+func discoverSubnets(ctx context.Context, d *discoverDeps, values []string, rep *discoverReport) ([]netip.Prefix, map[netip.Addr]bool, error) {
 	self := map[netip.Addr]bool{}
 	addrs, ierr := d.interfaces()
 	for _, a := range addrs {
-		self[a.Addr()] = true
+		if a.Flags&net.FlagLoopback == 0 {
+			self[a.Addr.Addr()] = true
+		}
 	}
 	var nets []netip.Prefix
 	if len(values) > 0 {
@@ -198,20 +205,38 @@ func discoverSubnets(d *discoverDeps, values []string, rep *discoverReport) ([]n
 		if ierr != nil {
 			return nil, nil, failed("holocron cam discover: this host's network interfaces cannot be read (%v): pass --subnet", ierr)
 		}
-		for _, l := range lan.LocalSubnets(addrs) {
-			nets = append(nets, l.Net)
-			if l.Narrowed.IsValid() {
-				rep.Notes = append(rep.Notes, fmt.Sprintf("%s is wider than a /24: only %s (around this host's %s) is scanned; pass --subnet for more", l.Narrowed, l.Net, l.Self))
-			}
+		routes, rerr := d.routes.Default(ctx)
+		sel := lan.Select(addrs, routes, rerr)
+		rep.Considered = append(rep.Considered, sel.Considered...)
+		rep.Notes = append(rep.Notes, sel.Notes...)
+		if sel.Refusal != "" {
+			return nil, nil, failed("holocron cam discover: %s\nthe networks of this host:\n%spass --subnet (repeatable) to choose, for example --subnet 192.168.1.0/24", sel.Refusal, considerationLines(sel.Considered))
 		}
-		if len(nets) == 0 {
-			return nil, nil, failed("holocron cam discover: this host has no private IPv4 network (10.x, 172.16-31.x, 192.168.x): pass --subnet")
+		for _, l := range sel.Nets {
+			nets = append(nets, l.Net)
 		}
 	}
 	for _, n := range nets {
 		rep.Subnets = append(rep.Subnets, n.String())
 	}
 	return nets, self, nil
+}
+
+// considerationLines is one line per network considered: kept or skipped, interface, network, why.
+func considerationLines(cs []lan.Considered) string {
+	width := 0
+	for _, c := range cs {
+		width = max(width, len(c.Name))
+	}
+	var b strings.Builder
+	for _, c := range cs {
+		verdict := "skipped"
+		if c.Kept {
+			verdict = "kept"
+		}
+		fmt.Fprintf(&b, "  %-7s %-*s %-18s %s\n", verdict, width, c.Name, c.CIDR, c.Reason)
+	}
+	return b.String()
 }
 
 // cameraHost is a camera's address as an IPv4 literal and its RTSP port (554 unless it names one).

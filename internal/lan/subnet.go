@@ -51,36 +51,11 @@ func ParseSubnet(s string, allowLoopback bool) (netip.Prefix, error) {
 	return netip.Prefix{}, fmt.Errorf("%s is not a private network (10.0.0.0/8, 172.16.0.0/12 or 192.168.0.0/16): cam discover scans only the local private network", p)
 }
 
-// Local is one private network this host is on.
+// Local is one private network an automatic scan covers.
 type Local struct {
 	Net      netip.Prefix // what is scanned
 	Self     netip.Addr   // this host's address on it
 	Narrowed netip.Prefix // the interface's own network when it was wider than a /24 (else invalid)
-}
-
-// LocalSubnets keeps the private IPv4 networks among the interface addresses (each an address with
-// its prefix length, as the interface carries it). Loopback, link-local and public networks are left
-// out; a network wider than a /24 (a VPN, a virtual switch) is narrowed to the /24 around this host's
-// address, so an automatic run stays small. Duplicates are dropped.
-func LocalSubnets(addrs []netip.Prefix) []Local {
-	var out []Local
-	seen := map[netip.Prefix]bool{}
-	for _, a := range addrs {
-		if !a.Addr().Is4() || !IsPrivate(a.Masked()) {
-			continue
-		}
-		l := Local{Net: a.Masked(), Self: a.Addr()}
-		if a.Bits() < 24 {
-			l.Narrowed = a.Masked()
-			l.Net = netip.PrefixFrom(a.Addr(), 24).Masked()
-		}
-		if seen[l.Net] {
-			continue
-		}
-		seen[l.Net] = true
-		out = append(out, l)
-	}
-	return out
 }
 
 // Hosts lists the addresses of nets in order, without the network and broadcast address of a /30 or
@@ -113,16 +88,16 @@ func Hosts(nets []netip.Prefix, skip map[netip.Addr]bool) ([]netip.Addr, error) 
 	return out, nil
 }
 
-// InterfaceAddrs is the IPv4 addresses, with their prefix length, of this host's interfaces that are
-// up and not loopback.
-func InterfaceAddrs() ([]netip.Prefix, error) {
+// InterfaceAddrs is the IPv4 addresses of this host's interfaces that are up, with each interface's
+// name and flags (loopback included; Select leaves it out).
+func InterfaceAddrs() ([]IfaceAddr, error) {
 	ifs, err := net.Interfaces()
 	if err != nil {
 		return nil, err
 	}
-	var out []netip.Prefix
+	var out []IfaceAddr
 	for _, in := range ifs {
-		if in.Flags&net.FlagUp == 0 || in.Flags&net.FlagLoopback != 0 {
+		if in.Flags&net.FlagUp == 0 {
 			continue
 		}
 		addrs, err := in.Addrs()
@@ -137,7 +112,7 @@ func InterfaceAddrs() ([]netip.Prefix, error) {
 			ones, bits := n.Mask.Size()
 			ip, _ := netip.AddrFromSlice(n.IP.To4())
 			if bits == 32 {
-				out = append(out, netip.PrefixFrom(ip, ones))
+				out = append(out, IfaceAddr{Name: in.Name, Addr: netip.PrefixFrom(ip, ones), Flags: in.Flags})
 			}
 		}
 	}

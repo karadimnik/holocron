@@ -68,23 +68,6 @@ func TestHostsAndLimits(t *testing.T) {
 	}
 }
 
-func TestLocalSubnets(t *testing.T) {
-	in := []netip.Prefix{
-		netip.MustParsePrefix("192.168.1.10/24"),
-		netip.MustParsePrefix("192.168.1.11/24"),  // a second interface on the same network
-		netip.MustParsePrefix("172.27.80.1/20"),   // a virtual switch: narrowed
-		netip.MustParsePrefix("169.254.10.2/16"),  // link-local: never
-		netip.MustParsePrefix("203.0.113.5/24"),   // public: never
-		netip.MustParsePrefix("100.101.102.3/32"), // CGNAT/VPN: not RFC 1918
-		netip.MustParsePrefix("fd00::5/64"),
-	}
-	got := LocalSubnets(in)
-	if len(got) != 2 || got[0].Net.String() != "192.168.1.0/24" || got[0].Self.String() != "192.168.1.10" || got[0].Narrowed.IsValid() ||
-		got[1].Net.String() != "172.27.80.0/24" || got[1].Narrowed.String() != "172.27.80.0/20" {
-		t.Errorf("%+v", got)
-	}
-}
-
 func ips(ns []Neighbour) map[string]string {
 	out := map[string]string{}
 	for _, n := range ns {

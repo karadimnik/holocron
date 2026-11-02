@@ -25,6 +25,10 @@ A version is `MAJOR.MINOR.PATCH`, tagged `vMAJOR.MINOR.PATCH`. The public interf
 - `cameras.json` takes an optional `MAC` per camera (the camera's hardware address, `aa:bb:cc:dd:ee:ff`, validated; absent by default and a camera without it behaves exactly as before). `holocron cam add --mac` and `holocron cam set --mac` set it (`--mac ""` removes it), `cam list` and `cam show` print it, and the web Settings save keeps it.
 - `holocron cam discover [--subnet CIDR ...] [--json] [--save-macs] [--apply]` finds RTSP cameras on this host's private IPv4 network (TCP 554 and each configured port, confirmed by an RTSP `OPTIONS` without a login, 800 ms per address, 64 at a time, at most a /22; public, link-local and wider subnets are refused), learns their MAC from the OS neighbour table, and compares with `cameras.json`: `known`, `new` (with a ready `holocron cam add` line), `moved` (the camera's stored MAC answers at exactly one other address; with a `holocron cam set --ip` line), `ambiguous`, `missing`, `unchecked`. `--save-macs` stores the MAC of each camera that answers at its address, `--apply` sets the new address of each `moved` camera; without them it is a dry run. `--json` has `schema` 1. Not yet run against a real camera network (tested with local fake RTSP servers).
 
+### Fixed
+
+- `holocron cam discover` without `--subnet` now scans the LAN the host is on instead of every private network it holds: interfaces of Docker, VMs, VPNs, tunnels and Wi-Fi direct (`docker0`, `br-*`, `veth*`, `bridge100`, `utun*`, `awdl0`, `vEthernet`, ...) and point-to-point or non-broadcast interfaces are dropped, and when the remaining LANs exceed the 1024-address limit only the one on the default route (read from the routing table) is scanned, with a note. Every automatic run and every refusal prints each interface considered with the reason it was kept or skipped, and `--json` has a new `considered` list.
+
 ## [1.4.3] - 2026-11-03
 
 ### Fixed
