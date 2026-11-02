@@ -1,4 +1,4 @@
-//go:build unix && !linux
+//go:build unix && !linux && !darwin
 
 package osx
 
@@ -7,9 +7,8 @@ import (
 	"syscall"
 )
 
-// OSInspector on macOS (and other Unix): the start time and image path need sysctl/proc_pidinfo
-// structures that the standard library does not expose, so nothing can be verified and the reap
-// leaves every entry alone (logged). Compiled only; nothing was run on a Mac.
+// OSInspector on a Unix other than Linux and macOS: the start time and image path are not read, so
+// nothing can be verified and the reap leaves every entry alone (logged). Compiled only.
 type OSInspector struct{}
 
 var errNoInspect = errors.New("process inspection is not implemented on this OS")

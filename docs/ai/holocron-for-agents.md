@@ -212,7 +212,7 @@ Rules: the loopback listener (`web.listen`) has no login and counts as admin; th
 
 | | Windows | Linux | macOS |
 | --- | --- | --- | --- |
-| children die with the supervisor | one unnamed job object with `KILL_ON_JOB_CLOSE`, no breakaway; children created suspended, assigned, resumed | `Pdeathsig: SIGKILL` set from one goroutine that locks its OS thread and never returns before `Close`; each child leads its own process group | `Setpgid` only, no kernel guarantee; the start-up reap leaves registry entries alone with a WARN (cannot verify start time and image) |
+| children die with the supervisor | one unnamed job object with `KILL_ON_JOB_CLOSE`, no breakaway; children created suspended, assigned, resumed | `Pdeathsig: SIGKILL` set from one goroutine that locks its OS thread and never returns before `Close`; each child leads its own process group | `Setpgid` only, no kernel guarantee; the start-up reap verifies pid, start time and image through sysctl as on Linux (implemented and unit-tested on Linux, not yet run on a Mac) |
 | attached `up`, terminal closed | console close, logoff, shutdown events become an ordered stop; `StopKind` `window-closed`, alert 103 | `SIGHUP`/`SIGTERM` the same | the same, UNVERIFIED |
 | `up --detach` | `DETACHED_PROCESS`, `CREATE_NEW_PROCESS_GROUP`, `CREATE_NO_WINDOW`, breakaway from the terminal's job when allowed | `Setsid` | `Setsid` |
 | autostart | logon task `Holocron` (default), optional service | systemd user unit | launchd agent, UNVERIFIED |
@@ -259,7 +259,7 @@ A pid registry applies on every OS: each child's pid, start time and image are w
 ## 15. Known limits and UNVERIFIED items
 
 - Windows service mode (`install --mode service`): tested against a fake service manager only; no elevated real install ([autostart.md](../autostart.md)). UNVERIFIED.
-- macOS: compiled and vetted, nothing run on a Mac; no kernel kill-on-close, the reap leaves entries alone, launchd and protected-root lists unverified ([osx README](../../internal/osx/README.md)). Keychain is not implemented.
+- macOS: compiled and vetted, nothing run on a Mac; no kernel kill-on-close; process inspection (host record, registry reap, `down`, doctor's process checks) is implemented through sysctl and unit-tested on Linux, not yet run on a Mac; launchd and protected-root lists unverified ([osx README](../../internal/osx/README.md)). Keychain is not implemented.
 - Linux on real hardware: the systemd user unit was exercised only in WSL2 with a test-named unit (documented-only, [cutover runbook appendix](../../tasks/holocron/cutover-runbook.md#appendix-linux-and-macos)).
 - The clock change of 25 Oct 2026 was not spanned by the shadow run (a past event; the record is the warning at the top of the [cutover runbook](../../tasks/holocron/cutover-runbook.md)); whether the live system ran across it is not recorded in this repository, UNVERIFIED. Unit tests and a synthetic clock cover it; the next change is 28 Mar 2027.
 - Microsoft Defender's machine-learning detection (`Trojan:Win32/Bearfoos.A!ml`, `Behavior:Win32/Persistence.A!ml`) quarantined freshly built unsigned test executables run from Temp folders on 17, 21 and 28 Oct 2026 (the installed program and the release were not flagged; whether the location matters is UNVERIFIED), so run test builds from a scratch folder outside Temp; install from a permanent folder; a signed binary is the durable fix ([autostart.md](../autostart.md), section on Microsoft Defender).

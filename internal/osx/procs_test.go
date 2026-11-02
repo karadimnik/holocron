@@ -8,7 +8,7 @@ import (
 
 // The list holds this process with its parent.
 func TestListProcsHoldsThisProcess(t *testing.T) {
-	if runtime.GOOS != "linux" && runtime.GOOS != "windows" {
+	if runtime.GOOS != "linux" && runtime.GOOS != "windows" && runtime.GOOS != "darwin" {
 		t.Skip("not implemented on " + runtime.GOOS)
 	}
 	ps, err := ListProcs()

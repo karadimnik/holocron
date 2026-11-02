@@ -17,7 +17,7 @@ import (
 // start, that a live pid is still the same process.
 type ChildEntry struct {
 	Pid   int    `json:"pid"`
-	Start string `json:"start"`           // start-time token (Windows creation FILETIME; Linux <boot_id>:<ticks>)
+	Start string `json:"start"`           // start-time token (Windows creation FILETIME; Linux <boot_id>:<ticks>; macOS <sec>.<usec>)
 	Image string `json:"image"`           // full image path
 	Group int    `json:"group,omitempty"` // process group id (Unix)
 	Role  string `json:"role,omitempty"`  // for the log only
