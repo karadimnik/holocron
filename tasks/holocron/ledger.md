@@ -156,6 +156,7 @@ Update this file in the same push as each merge: `git log --first-parent --merge
 | 3b3ad89 | 2026-10-29 | Merge Holocron R18: the No footage line shows in full, no blank gap in Admin > System, no em dashes in the pages (plus a test), wrapped meta lines on the phone; README screenshots re-rendered |  |
 | 429cca6 | 2026-11-02 | Merge Holocron R19: macOS Intel release archive (darwin_amd64) and a clearer build-holocron.sh message when Go is missing |  |
 | fa4ce6d | 2026-11-02 | Merge Holocron R20: process inspection on macOS (kinfo_proc via raw sysctl): host.json written, roles registered, doctor no longer misreports, down can stop a detached host. Cross-built and unit-tested on Linux only; NOT run on a Mac |  |
+| 8b84846 | 2026-11-02 | Merge Holocron R21: the Live page plays sub when offered, else main (a camera recorded on the sub stream has no sub path); no dead HD chip in the enlarged view. Rendered with real WebRTC against MediaMTX and a stub web API; not run on the Operator's Mac |  |
 
 ## Releases
 
