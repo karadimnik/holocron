@@ -803,3 +803,39 @@ func TestLiveListScrubsAndStatusDropsPaths(t *testing.T) {
 		t.Errorf("/api/status lost the rest of the Live section: %v %s", err, status)
 	}
 }
+
+// A camera that records its sub stream has no sub path (relay.LivePaths), so api/live lists it with
+// sub false and main true (Cam Two above, and a 404 for ?stream=sub in TestLiveRequestValidation).
+// The served page plays sub when it is offered and main otherwise, re-reads that choice at every
+// list poll, names in its diagnostics the stream the attempt asked for, and opens no HD chip,
+// Retry HD or main session for a camera whose tile already plays its only stream.
+func TestLivePagePlaysTheStreamTheCameraOffers(t *testing.T) {
+	raw, err := staticFiles.ReadFile("static/live.js")
+	if err != nil {
+		t.Fatal(err)
+	}
+	live := string(raw)
+	for _, want := range []string{
+		`const tileKind = (cam) => (!cam.sub && cam.main ? "main" : "sub");`,
+		`const hasHD = (tile) => tile.kind === "sub" && !!tile.cam.main;`,
+		`kind: tileKind(cam), state: "idle",`,
+		"    const kind = tileKind(cam);\n    if (kind !== tile.kind) {\n      closeTile(tile);\n      tile.kind = kind;",
+		"    const kind = conn.kind;\n    const diag = conn.diag = newDiag(kind);",
+		`"/whep?stream=" + kind, {`,
+		`"stream=" + diag.kind,`,
+		`return tile && !hasHD(tile) ? tileLine(tile) : diagLine(m.conn.diag, m.verdict || m.hd, m);`,
+		`ui.chips.innerHTML = chipHTML(cls, word) + (hd ? " " + chipHTML(chip[0], chip[1]) : "");`,
+		`ui.retry.classList.toggle("hide", !hd || m.hd !== "unavailable");`,
+		"    if (tile && !hasHD(tile)) {\n",
+		`if (view.modal || !usable() || !view.tiles.has(name) || !hasHD(view.tiles.get(name))) return;`,
+	} {
+		if !strings.Contains(live, want) {
+			t.Errorf("live.js lacks %q", want)
+		}
+	}
+	for _, stale := range []string{`kind: "sub"`, `"/whep?stream=" + conn.kind`, `diagLine(m.conn.diag, "main"`} {
+		if strings.Contains(live, stale) {
+			t.Errorf("live.js still has %q", stale)
+		}
+	}
+}
