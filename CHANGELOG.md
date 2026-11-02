@@ -20,6 +20,8 @@ A version is `MAJOR.MINOR.PATCH`, tagged `vMAJOR.MINOR.PATCH`. The public interf
 
 ## [Unreleased]
 
+## [1.4.2] - 2026-11-03
+
 ### Added
 
 - `holocron config set` takes several `<key> <value>` pairs in one command (`holocron config set LiveUdpAddress 0.0.0.0:8189 LiveAdvertiseHosts '["192.168.1.50"]'`): they are applied to one copy, validated once as a whole and written atomically only if all of it is valid, so keys that are valid only together (LAN live view) can be set without hand-editing `holocron.config.json`. A refused command writes nothing; a key given twice is refused. A single-key refusal by a rule across keys now ends with the combined form.
@@ -128,7 +130,8 @@ The first version of Holocron in its own repository: a Go network video recorder
 - Builds for Windows (first-class and live), Linux and macOS, cross-compiled and tested in CI.
 - Licence: [PolyForm Noncommercial License 1.0.0](LICENSE) (decision D22).
 
-[Unreleased]: https://github.com/karadimnik/holocron/compare/v1.4.1...HEAD
+[Unreleased]: https://github.com/karadimnik/holocron/compare/v1.4.2...HEAD
+[1.4.2]: https://github.com/karadimnik/holocron/compare/v1.4.1...v1.4.2
 [1.4.1]: https://github.com/karadimnik/holocron/compare/v1.4.0...v1.4.1
 [1.4.0]: https://github.com/karadimnik/holocron/compare/v1.3.2...v1.4.0
 [1.3.2]: https://github.com/karadimnik/holocron/compare/v1.3.1...v1.3.2
