@@ -5,6 +5,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"net"
 	"net/netip"
 	"os"
@@ -176,10 +177,21 @@ func (l *lab) dial(ctx context.Context, network, addr string) (net.Conn, error) 
 func (r *rig) useLab(l *lab, table []lan.Neighbour, timeout time.Duration, inFlight int) {
 	r.discover = func(d *discoverDeps) {
 		d.dial, d.table, d.timeout, d.inFlight = l.dial, lan.FakeTable{Entries: table}, timeout, inFlight
-		d.interfaces = func() ([]netip.Prefix, error) {
-			return []netip.Prefix{netip.MustParsePrefix("192.168.1.100/24"), netip.MustParsePrefix("172.27.80.1/20")}, nil
+		d.interfaces = func() ([]lan.IfaceAddr, error) {
+			return []lan.IfaceAddr{
+				ifaceAddr("eth0", "192.168.1.100/24", lanFlags),
+				ifaceAddr("docker0", "172.17.0.1/16", lanFlags),
+				ifaceAddr("eth1", "172.27.80.1/20", lanFlags),
+			}, nil
 		}
+		d.routes = lan.FakeRoutes{Routes: []lan.DefaultRoute{{Interface: "eth0", Gateway: netip.MustParseAddr("192.168.1.1")}}}
 	}
+}
+
+const lanFlags = net.FlagUp | net.FlagBroadcast | net.FlagMulticast
+
+func ifaceAddr(name, cidr string, flags net.Flags) lan.IfaceAddr {
+	return lan.IfaceAddr{Name: name, Addr: netip.MustParsePrefix(cidr), Flags: flags}
 }
 
 func neighbours(pairs ...string) []lan.Neighbour {
@@ -261,12 +273,65 @@ func TestCamDiscoverSubnets(t *testing.T) {
 	if code != 0 || strings.Join(rep.Subnets, ",") != "192.168.1.0/24,172.27.80.0/24" || rep.Addresses != 506 || len(rep.Notes) != 1 || !strings.Contains(rep.Notes[0], "172.27.80.0/20") {
 		t.Errorf("%d %+v", code, rep)
 	}
+	if len(rep.Considered) != 3 || !rep.Considered[0].Kept || rep.Considered[0].Reason != "carries the default route" ||
+		rep.Considered[1].Kept || rep.Considered[1].Name != "docker0" || !strings.Contains(rep.Considered[1].Reason, "Docker") || !rep.Considered[2].Kept {
+		t.Errorf("considered: %+v", rep.Considered)
+	}
+	text, _, _ := r.run("cam", "discover")
+	if !strings.Contains(text, "no --subnet given; the networks of this host:\n  kept    eth0    192.168.1.0/24     carries the default route\n  skipped docker0 172.17.0.0/16      virtual interface: Docker bridge\n") ||
+		!strings.Contains(text, "scanning 192.168.1.0/24, 172.27.80.0/24: 506 address(es)") {
+		t.Errorf("text header:\n%s", text)
+	}
 	for _, bad := range [][]string{{"--subnet", "8.8.8.0/24"}, {"--subnet", "192.168.0.0/21"}, {"--subnet", "127.0.0.1/32"}, {"--subnet", "192.168.1.0/22", "--subnet", "10.0.0.0/24"}} {
 		l.maxSeen.Store(0)
 		out, errw, code := r.run(append([]string{"cam", "discover"}, bad...)...)
 		if code != exitUsage || l.maxSeen.Load() != 0 || !strings.Contains(errw, "cam discover") {
 			t.Errorf("%v: %d probes %d\n%s%s", bad, code, l.maxSeen.Load(), out, errw)
 		}
+	}
+}
+
+// An automatic run that cannot decide says why and lists every network it looked at, probing nothing; one
+// that must narrow says so in a note; an explicit --subnet considers nothing.
+func TestCamDiscoverAutomaticRefusalAndNarrowing(t *testing.T) {
+	r := newRig(t)
+	l := &lab{}
+	useHost := func(routes lan.FakeRoutes, ifs ...lan.IfaceAddr) {
+		r.useLab(l, nil, 20*time.Millisecond, 64)
+		base := r.discover
+		r.discover = func(d *discoverDeps) {
+			base(d)
+			d.interfaces = func() ([]lan.IfaceAddr, error) { return ifs, nil }
+			d.routes = routes
+		}
+	}
+	useHost(lan.FakeRoutes{}, ifaceAddr("docker0", "172.17.0.1/16", lanFlags), ifaceAddr("utun3", "10.8.0.2/24", lanFlags))
+	out, errw, code := r.run("cam", "discover")
+	if code != exitFailure || out != "" || !strings.Contains(errw, "no interface is on a private IPv4 LAN") ||
+		!strings.Contains(errw, "  skipped docker0 172.17.0.0/16      virtual interface: Docker bridge\n") || !strings.Contains(errw, "  skipped utun3   10.8.0.0/24") || !strings.Contains(errw, "pass --subnet") {
+		t.Errorf("no LAN: %d %q %q", code, out, errw)
+	}
+
+	five := []lan.IfaceAddr{
+		ifaceAddr("eth0", "192.168.1.9/24", lanFlags), ifaceAddr("eth1", "192.168.2.9/24", lanFlags), ifaceAddr("eth2", "192.168.3.9/24", lanFlags),
+		ifaceAddr("eth3", "192.168.4.9/24", lanFlags), ifaceAddr("eth4", "192.168.5.9/24", lanFlags),
+	}
+	useHost(lan.FakeRoutes{Err: errors.New("no route reader")}, five...)
+	out, errw, code = r.run("cam", "discover")
+	if code != exitFailure || !strings.Contains(errw, "1280 addresses") || !strings.Contains(errw, "no route reader") || strings.Count(errw, "  skipped eth") != 5 {
+		t.Errorf("over the cap, no default route: %d %q %q", code, out, errw)
+	}
+
+	useHost(lan.FakeRoutes{Routes: []lan.DefaultRoute{{Interface: "eth2", Gateway: netip.MustParseAddr("192.168.3.1")}}}, five...)
+	out, _, code = r.run("--json", "cam", "discover")
+	rep := discoverJSON(t, out)
+	if code != 0 || strings.Join(rep.Subnets, ",") != "192.168.3.0/24" || len(rep.Notes) != 1 || !strings.Contains(rep.Notes[0], "192.168.1.0/24 (eth0)") || !strings.Contains(rep.Notes[0], "--subnet") {
+		t.Errorf("narrowed to the default route: %d %+v", code, rep)
+	}
+
+	out, _, code = r.run("--json", "cam", "discover", "--subnet", "192.168.1.0/29")
+	if rep := discoverJSON(t, out); code != 0 || len(rep.Considered) != 0 || !strings.Contains(out, `"considered": []`) && !strings.Contains(out, `"considered":[]`) {
+		t.Errorf("explicit subnet: %d %s", code, out)
 	}
 }
 
