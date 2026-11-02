@@ -8,10 +8,10 @@
 //   - The page only ever names a CAMERA and sub|main. It never sees the live
 //     instance's address, its login, or a path name; camui adds the login and
 //     returns a session address it minted itself.
-//   - Tiles play the sub-stream and are never touched by a click. A click
-//     opens a MODAL for that camera: it shows the tile's own MediaStream at
-//     once and, in a second video, the main stream as soon as that has decoded
-//     a frame. One main session exists at most, owned by the modal.
+//   - Tiles play the sub-stream (main when only main is offered: tileKind) and are never touched by a click. A click
+//     opens a MODAL for that camera: it shows the tile's own MediaStream at once and, if the tile plays sub and main is
+//     offered (hasHD), in a second video the main stream as soon as that has decoded a frame. One main session exists at
+//     most, owned by the modal.
 //   - The grid fills the window (bestGrid; or, in Fill mode, bestGridFill: the cells divide the whole area and the picture is
 //     cropped to them) and can go fullscreen.
 //   - Audio is muted until the Operator unmutes that tile (or the modal).
@@ -141,6 +141,11 @@ const Live = (() => {
   // Streams may be open: live view runs and the grace period (if away) has not run out. Being hidden alone does not close anything.
   const usable = () => !view.freed && Date.now() >= view.holdUntil && view.info && view.info.enabled && view.info.alive;
   const chipHTML = (cls, word) => '<span class="chip ' + cls + '"><i class="dot"></i>' + esc(word) + "</span>";
+  // The stream a tile plays: sub when the camera offers it, else main. A camera whose recording stream is LiveSubStream
+  // has no sub path (relay.LivePaths), so its tile plays main; a camera that offers neither tries sub and says why it failed.
+  const tileKind = (cam) => (!cam.sub && cam.main ? "main" : "sub");
+  // The modal has a better picture than the tile's only when the tile plays sub and main is offered too.
+  const hasHD = (tile) => tile.kind === "sub" && !!tile.cam.main;
 
   // ---- diagnostics ---------------------------------------------------------
 
@@ -194,18 +199,18 @@ const Live = (() => {
     return "other";
   }
 
-  const newDiag = () => ({ t0: performance.now(), http: null, httpText: "", gather: "new", gatherMs: null, ice: "new", conn: "new",
+  const newDiag = (kind) => ({ kind, t0: performance.now(), http: null, httpText: "", gather: "new", gatherMs: null, ice: "new", conn: "new",
     local: null, answer: null, pair: null, postMs: null, connMs: null, frameMs: null, hdMs: null });
 
   const elapsed = (diag) => Math.round(performance.now() - diag.t0);
   const seconds = (diag) => Math.round((performance.now() - diag.t0) / 1000);
 
   // One line for pasting into a bug report. No address, no camera name. Every ms is from the start of the attempt
-  // (hd: from the click that opened the modal).
-  function diagLine(diag, kind, verdict, policy) {
+  // (hd: from the click that opened the modal). The stream is the one this attempt asked for.
+  function diagLine(diag, verdict, policy) {
     if (!diag) return "live-diag/3 browser=" + browserFamily() + " no attempt yet";
     const ms = (label, value) => (value === null || value === undefined ? [] : [label + "=" + value + "ms"]);
-    return ["live-diag/3", "browser=" + browserFamily(), "stream=" + kind, "http=" + (diag.http === null ? "none" : diag.http),
+    return ["live-diag/3", "browser=" + browserFamily(), "stream=" + diag.kind, "http=" + (diag.http === null ? "none" : diag.http),
       "gather=" + diag.gather + (diag.gatherMs === null ? "" : "(" + diag.gatherMs + "ms)"), ...ms("post", diag.postMs),
       "ice=" + diag.ice, "conn=" + diag.conn, ...ms("connected", diag.connMs), ...ms("frame", diag.frameMs), ...ms("hd", diag.hdMs),
       "local=[" + summary(diag.local) + "]", "answer=[" + summary(diag.answer) + "]", diag.pair ? "pair=" + diag.pair : "pair=none",
@@ -214,8 +219,12 @@ const Live = (() => {
   }
 
   const hiddenSeconds = () => (view.hiddenSince === null ? 0 : Math.round((Date.now() - view.hiddenSince) / 1000));
-  const tileLine = (tile) => diagLine(tile.diag, tile.kind, tile.lastVerdict || tile.detail || tile.state, tile);
-  const modalLine = (m) => diagLine(m.conn.diag, "main", m.verdict || m.hd, m);
+  const tileLine = (tile) => diagLine(tile.diag, tile.lastVerdict || tile.detail || tile.state, tile);
+  // A modal without HD shows the tile's picture and has no connection of its own: its line is the tile's.
+  const modalLine = (m) => {
+    const tile = view.tiles.get(m.name);
+    return tile && !hasHD(tile) ? tileLine(tile) : diagLine(m.conn.diag, m.verdict || m.hd, m);
+  };
 
   // The first decoded frame of a video element; callers guard against a connection that has moved on.
   function firstFrame(video, done) {
@@ -362,7 +371,7 @@ const Live = (() => {
         '<div class="lbar"><span class="lname">' + esc(cam.name) + '</span><span class="lchip"></span>' +
         '<button type="button" class="lmute" aria-pressed="false" title="Sound is muted. Click to unmute.">Unmute</button></div>';
       const tile = { name: cam.name, root, video: root.querySelector("video"), pc: null, session: null, gen: 0, media: null,
-        kind: "sub", state: "idle", detail: "", fails: 0, retry: null, watchdog: null, lostTimer: null, tick: null, diag: null,
+        kind: tileKind(cam), state: "idle", detail: "", fails: 0, retry: null, watchdog: null, lostTimer: null, tick: null, diag: null,
         lastVerdict: "", lastDetail: "", cam, everLive: false, stalls: 0, recoveries: 0, lastFrames: -1, lastAdvance: 0,
         inView: true, offSince: 0, parked: false, wasDown: false };
       tile.video.muted = true;
@@ -374,9 +383,19 @@ const Live = (() => {
     fit();
   }
 
+  // A camera's offer can change while the page is open (its Stream was edited and the recorder restarted): a tile on a
+  // stream that is no longer the one to play is closed here and reopened on the new one by the sync() that follows.
   function updateTile(tile, cam) {
     if (!tile) return;
     tile.cam = cam;
+    const kind = tileKind(cam);
+    if (kind !== tile.kind) {
+      closeTile(tile);
+      tile.kind = kind;
+      tile.fails = 0;
+      tile.lastVerdict = tile.lastDetail = "";
+      setState(tile, "idle");
+    }
     paint(tile);
   }
 
@@ -399,7 +418,7 @@ const Live = (() => {
     if (view.modal && view.modal.opened && view.modal.name === tile.name) paintModal();
   }
 
-  // ---- one WebRTC session, for a tile (sub) or for the modal (main) -------------
+  // ---- one WebRTC session, for a tile (its tileKind) or for the modal (main) ------
 
   const gathered = (pc, ms) => new Promise((resolve) => {
     if (pc.iceGatheringState === "complete") return resolve();
@@ -445,7 +464,8 @@ const Live = (() => {
   // Hooks are called only while conn.gen is the one this attempt started with.
   async function dial(conn, hooks) {
     const gen = conn.gen;
-    const diag = conn.diag = newDiag();
+    const kind = conn.kind;
+    const diag = conn.diag = newDiag(kind);
     const ok = () => conn.gen === gen;
     const call = (name, ...args) => { if (ok() && hooks[name]) hooks[name](...args); };
     try {
@@ -487,7 +507,7 @@ const Live = (() => {
       diag.local = candidates(pc.localDescription.sdp);
 
       const sent = performance.now();
-      const response = await fetch("api/live/" + encodeURIComponent(conn.name) + "/whep?stream=" + conn.kind, {
+      const response = await fetch("api/live/" + encodeURIComponent(conn.name) + "/whep?stream=" + kind, {
         method: "POST",
         headers: { "Content-Type": "application/sdp" },
         body: pc.localDescription.sdp,
@@ -681,10 +701,11 @@ const Live = (() => {
     if (!m || !m.opened) return;
     const tile = view.tiles.get(m.name);
     ui.name.textContent = m.name;
-    const [cls, word] = m.hd === "ready" ? CHIP.live : CHIP[tile ? tile.state : "idle"] || CHIP.idle;
-    const hd = m.hd === "ready" ? ["good", "HD"] : m.hd === "unavailable" ? ["crit", "HD unavailable"] : ["warn", "HD loading..."];
-    ui.chips.innerHTML = chipHTML(cls, word) + " " + chipHTML(hd[0], hd[1]);
-    ui.retry.classList.toggle("hide", m.hd !== "unavailable");
+    const hd = tile && hasHD(tile);
+    const [cls, word] = hd && m.hd === "ready" ? CHIP.live : CHIP[tile ? tile.state : "idle"] || CHIP.idle;
+    const chip = m.hd === "ready" ? ["good", "HD"] : m.hd === "unavailable" ? ["crit", "HD unavailable"] : ["warn", "HD loading..."];
+    ui.chips.innerHTML = chipHTML(cls, word) + (hd ? " " + chipHTML(chip[0], chip[1]) : "");
+    ui.retry.classList.toggle("hide", !hd || m.hd !== "unavailable");
     ui.mute.textContent = m.muted ? "Unmute" : "Mute";
     ui.mute.setAttribute("aria-pressed", String(!m.muted));
     ui.msg.textContent = !ui.vsub.srcObject && m.shown === "sub" && tile ? explain(tile)[0] : "";
@@ -755,11 +776,23 @@ const Live = (() => {
       }
       return;
     }
+    const tile = view.tiles.get(m.name);
+    if (tile && !hasHD(tile)) {
+      // One stream only: the modal shows the tile's picture, and a main session of its own would show the same again.
+      if (m.conn.pc || m.conn.session || m.shown === "main" || m.hd !== "loading") {
+        hangup(m.conn);
+        m.hd = "loading";
+        m.verdict = "";
+        showSub(m);
+        paintModal();
+      }
+      return;
+    }
     if (!m.conn.pc && m.hd !== "unavailable") startMain(m);
   }
 
   function warmStart(name) {
-    if (view.modal || !usable() || !view.tiles.has(name)) return;
+    if (view.modal || !usable() || !view.tiles.has(name) || !hasHD(view.tiles.get(name))) return;
     const m = view.modal = newModal(name);
     m.warmTimer = setTimeout(dropWarm, WARM_MAX_MS);
     dial(m.conn, mainHooks(m));
@@ -1330,7 +1363,8 @@ const Live = (() => {
     let modal = null;
     const m = view.modal;
     if (m) {
-      modal = { name: m.name, opened: m.opened, hd: m.hd, shown: m.shown, muted: m.muted, hdMs: m.hdMs, verdict: m.verdict, pushed: m.pushed,
+      const tile = view.tiles.get(m.name);
+      modal = { name: m.name, opened: m.opened, hdOffered: !!tile && hasHD(tile), hd: m.hd, shown: m.shown, muted: m.muted, hdMs: m.hdMs, verdict: m.verdict, pushed: m.pushed,
         session: !!m.conn.session, connection: m.conn.pc ? m.conn.pc.connectionState : null, ms: timing(m.conn.diag), line: modalLine(m),
         message: ui.msg.textContent, chips: ui.chips.textContent, hash: location.hash, dialogOpen: ui.dialog.open,
         focusInside: ui.dialog.contains(document.activeElement), box: (() => { const b = ui.box.getBoundingClientRect(); return { x: Math.round(b.x), y: Math.round(b.y), w: Math.round(b.width), h: Math.round(b.height) }; })() };

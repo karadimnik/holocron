@@ -23,6 +23,7 @@ A version is `MAJOR.MINOR.PATCH`, tagged `vMAJOR.MINOR.PATCH`. The public interf
 ### Fixed
 
 - macOS: process inspection is implemented (sysctl `kern.proc.pid`, `kern.procargs2`, `kern.proc.all`; it returned "not implemented" before). With it the host writes `host.json`, the web and relay roles are listed for `holocron down`, `down` can stop a detached host, and `holocron doctor` no longer reports a running host as missing or its own web port as held by another program. Cross-compiled for darwin/amd64 and darwin/arm64 and unit-tested on Linux; not yet run on a Mac.
+- Live view: a camera that records its sub stream (`Stream` equal to `LiveSubStream`, default `stream2`) showed "No picture from this camera", because the page always asked for the sub stream and such a camera only offers main. A tile now plays sub when the camera offers it and main otherwise, re-checked at every poll of the camera list, and the enlarged view of a one-stream camera shows no HD chip or Retry HD and opens no second session for the same picture. The diagnostics line names the stream the attempt asked for.
 
 ## [1.4.0] - 2026-11-02
 
