@@ -420,6 +420,69 @@ func TestConfigSetValidationLeavesFileUntouched(t *testing.T) {
 	}
 }
 
+// LiveUdpAddress beyond loopback and LiveAdvertiseHosts are each refused alone (the refusal names
+// the combined form) and accepted together, in either order.
+func TestConfigSetSeveralKeysTogether(t *testing.T) {
+	const hint = " - set keys that are valid only together in one command: holocron config set "
+	udp, hosts := []string{"LiveUdpAddress", "0.0.0.0:8189"}, []string{"LiveAdvertiseHosts", `["192.168.1.50"]`}
+	for _, order := range [][][]string{{udp, hosts}, {hosts, udp}} {
+		r := newRig(t)
+		before, _ := os.ReadFile(r.cfg)
+		for _, kv := range order {
+			want := hint + kv[0] + " <value> " + order[0][0] + " <value>\n"
+			if kv[0] == order[0][0] {
+				want = hint + kv[0] + " <value> " + order[1][0] + " <value>\n"
+			}
+			if _, errw, code := r.run("config", "set", kv[0], kv[1]); code != 1 || !strings.HasSuffix(errw, want) {
+				t.Errorf("%s alone: exit %d, want the suffix %q:\n%s", kv[0], code, want, errw)
+			}
+			if after, _ := os.ReadFile(r.cfg); !bytes.Equal(before, after) {
+				t.Fatalf("%s alone changed the file", kv[0])
+			}
+		}
+		out, errw, code := r.run("config", "set", order[0][0], order[0][1], order[1][0], order[1][1])
+		if code != 0 || !strings.Contains(out, `LiveUdpAddress: (default) -> "0.0.0.0:8189"`) || !strings.Contains(out, "LiveAdvertiseHosts: (default) -> [") {
+			t.Fatalf("%s then %s: exit %d\n%s%s", order[0][0], order[1][0], code, out, errw)
+		}
+		if out, _, _ := r.run("config", "get", "LiveUdpAddress"); strings.TrimSpace(out) != "0.0.0.0:8189" {
+			t.Errorf("get LiveUdpAddress %q", out)
+		}
+		if out, _, _ := r.run("config", "get", "LiveAdvertiseHosts"); !strings.Contains(out, `"192.168.1.50"`) {
+			t.Errorf("get LiveAdvertiseHosts %q", out)
+		}
+		if out, _, code := r.run("config", "validate"); code != 0 || !strings.Contains(out, "ok   "+r.cfg) {
+			t.Errorf("validate: exit %d\n%s", code, out)
+		}
+	}
+}
+
+// One bad pair, a key given twice or an odd number of arguments refuses the whole command and
+// leaves the file byte-identical; a refusal that is not about a key missing from the command has no hint.
+func TestConfigSetSeveralKeysAllOrNothing(t *testing.T) {
+	r := newRig(t)
+	before, _ := os.ReadFile(r.cfg)
+	for _, c := range []struct {
+		args []string
+		code int
+		want string
+	}{
+		{[]string{"LiveUdpAddress", "0.0.0.0:8189", "LiveAdvertiseHosts", "[]"}, 1, "listens beyond loopback but LiveAdvertiseHosts is empty, so no browser would be told to use it. List the address(es) browsers reach this PC by, or set LiveUdpAddress back to 127.0.0.1.\n"},
+		{[]string{"ReserveGB", "5", "SegmentSeconds", "0", "MaxRetentionDays", "30"}, 1, "SegmentSeconds"},
+		{[]string{"ReserveGB", "5", "RootPath", "/x"}, 1, "not a key"},
+		{[]string{"ReserveGB", "5", "reservegb", "6"}, 1, "ReserveGB is given twice"},
+		{[]string{"ReserveGB", "5", "SegmentSeconds"}, 2, "pairs"},
+		{[]string{"SegmentSeconds", "0"}, 1, "SegmentSeconds"},
+	} {
+		_, errw, code := r.run(append([]string{"config", "set"}, c.args...)...)
+		if code != c.code || !strings.Contains(errw, c.want) || strings.Contains(errw, "in one command") {
+			t.Errorf("%v: exit %d want %d and %q:\n%s", c.args, code, c.code, c.want, errw)
+		}
+		if after, _ := os.ReadFile(r.cfg); !bytes.Equal(before, after) {
+			t.Fatalf("%v changed the file", c.args)
+		}
+	}
+}
+
 func TestCamRoundTripKeepsBOMAndUnknownFields(t *testing.T) {
 	r := newRig(t)
 	for _, a := range [][]string{{"cam", "add", "--name", "Side", "--ip", "192.0.2.12", "--quality", "stream2", "--record"},

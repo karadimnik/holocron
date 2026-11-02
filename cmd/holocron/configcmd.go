@@ -6,6 +6,8 @@ import (
 	"errors"
 	"flag"
 	"fmt"
+	"regexp"
+	"slices"
 	"strings"
 
 	"holocron/internal/app"
@@ -61,10 +63,62 @@ func cmdConfigSet(ctx context.Context, e *env) error {
 	if err != nil {
 		return err
 	}
-	if err := wantArgs("config set", pos, 2, 2); err != nil {
+	if err := wantArgs("config set", pos, 2, -1); err != nil {
 		return err
 	}
-	return configEdit(ctx, e, pos[0], app.ParseValue(pos[1]))
+	if len(pos)%2 != 0 {
+		return usageErr("holocron config set: give <key> <value> pairs, got %d arguments (see holocron config set --help)", len(pos))
+	}
+	edits := make([]app.KeyValue, 0, len(pos)/2)
+	for i := 0; i < len(pos); i += 2 {
+		edits = append(edits, app.KeyValue{Key: pos[i], Value: app.ParseValue(pos[i+1])})
+	}
+	return withTogetherHint(configEditMany(ctx, e, edits), edits)
+}
+
+// withTogetherHint ends the refusal of a rule across keys (LiveUdpAddress beyond loopback needs
+// LiveAdvertiseHosts, and the reverse) with the one command that sets them together, when a key it
+// names is not in the command yet.
+func withTogetherHint(err error, edits []app.KeyValue) error {
+	var ve *config.ValidationError
+	if !errors.As(err, &ve) {
+		return err
+	}
+	var keys []string
+	for _, kv := range edits {
+		canon, _ := app.CanonicalKey(kv.Key)
+		keys = append(keys, canon)
+	}
+	given := len(keys)
+	for _, p := range ve.Problems {
+		named := editableKeysIn(p.String())
+		if len(named) < 2 {
+			continue
+		}
+		for _, k := range named {
+			if !slices.Contains(keys, k) {
+				keys = append(keys, k)
+			}
+		}
+	}
+	if len(keys) == given {
+		return err
+	}
+	return fmt.Errorf("%w - set keys that are valid only together in one command: holocron config set %s <value>", err, strings.Join(keys, " <value> "))
+}
+
+// editableKeysIn lists the editable keys a problem text names, in allow-list order.
+func editableKeysIn(text string) []string {
+	var named []string
+	for _, k := range app.EditableKeys {
+		if strings.HasSuffix(k, ".*") {
+			continue
+		}
+		if regexp.MustCompile(`(^|[^A-Za-z0-9_.])` + regexp.QuoteMeta(k) + `($|[^A-Za-z0-9_])`).MatchString(text) {
+			named = append(named, k)
+		}
+	}
+	return named
 }
 
 func cmdConfigUnset(ctx context.Context, e *env) error {
@@ -79,17 +133,32 @@ func cmdConfigUnset(ctx context.Context, e *env) error {
 }
 
 func configEdit(ctx context.Context, e *env, key string, value json.RawMessage) error {
-	ed, err := app.EditConfig(e.paths.Config, key, value, e.opts.Platform)
+	return configEditMany(ctx, e, []app.KeyValue{{Key: key, Value: value}})
+}
+
+// configEditMany applies the edits as one (validated once, written once or not at all) and prints
+// one line per key.
+func configEditMany(ctx context.Context, e *env, edits []app.KeyValue) error {
+	eds, err := app.EditConfigMany(e.paths.Config, edits, e.opts.Platform)
 	if err != nil {
 		return err
 	}
-	if !ed.Changed {
-		fmt.Fprintf(e.out, "%s: unchanged\n", ed.Key)
+	onlyLive := true
+	changed := false
+	for _, ed := range eds {
+		if !ed.Changed {
+			fmt.Fprintf(e.out, "%s: unchanged\n", ed.Key)
+			continue
+		}
+		changed = true
+		onlyLive = onlyLive && ed.Key == "LiveViewEnabled"
+		fmt.Fprintf(e.out, "%s: %s -> %s (%s)\n", ed.Key, rawText(ed.Old), rawText(ed.New), e.paths.Config)
+	}
+	if !changed {
 		return nil
 	}
-	fmt.Fprintf(e.out, "%s: %s -> %s (%s)\n", ed.Key, rawText(ed.Old), rawText(ed.New), e.paths.Config)
 	if c, ok := dialRunning(e); ok {
-		if strings.EqualFold(ed.Key, "LiveViewEnabled") {
+		if onlyLive {
 			if err := c.Reload(ctx); err == nil {
 				fmt.Fprintln(e.out, "the running supervisor applied it")
 				return nil
