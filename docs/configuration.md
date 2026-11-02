@@ -135,3 +135,5 @@ These four groups are objects in `holocron.config.json`; their sub-keys are came
 ## The camera list
 
 `cameras.json` is a separate file with its own schema - see [KEYS.md](../internal/config/KEYS.md#camerasjson). Edit it with `holocron cam add|set|remove|enable|disable` (validated, written atomically); the web app's Settings screen edits it too: add, remove, rename, change the IP, the stream and the record flag. The supervisor picks up a change within `ReconcileSeconds`.
+
+A camera may carry its hardware address as `MAC` (optional, `aa:bb:cc:dd:ee:ff`): `holocron cam add --mac` and `holocron cam set --mac` set it (dashes and upper case are accepted and stored in that form; `--mac ""` removes it), `cam list` and `cam show` print it. Recording does not use it; a camera without it behaves exactly as before. The Settings screen does not show it and keeps it when it saves.

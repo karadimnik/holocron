@@ -14,13 +14,14 @@ import (
 	"holocron/internal/archive"
 )
 
-// Camera is one entry of cameras.json. Name, IP, Quality and Record are what the product reads;
+// Camera is one entry of cameras.json. Name, IP, Quality, Record and MAC are what the product reads;
 // every other field in the file is kept untouched, in its place, across a Save (as Set-CamList does).
 type Camera struct {
 	Name    string
 	IP      string
 	Quality string // stream path; blank means stream1
 	Record  bool   // only an explicit true records
+	MAC     string // optional hardware address, aa:bb:cc:dd:ee:ff; blank means unknown (not written)
 
 	fields []field // as read, in file order
 }
@@ -36,7 +37,7 @@ type Cameras struct {
 	BOM  bool // the file started with a UTF-8 BOM
 }
 
-var knownCameraKeys = []string{"Name", "IP", "Quality", "Record"}
+var knownCameraKeys = []string{"Name", "IP", "Quality", "Record", "MAC"}
 
 func canonicalCameraKey(k string) string {
 	for _, c := range knownCameraKeys {
@@ -105,7 +106,7 @@ func (c *Cameras) Parse(data []byte) error {
 				}
 				_ = json.Unmarshal(f.raw, &cam.Record)
 			default:
-				if kind == "null" && key == "Quality" {
+				if kind == "null" && (key == "Quality" || key == "MAC") {
 					continue
 				}
 				if kind != "a string" {
@@ -121,6 +122,8 @@ func (c *Cameras) Parse(data []byte) error {
 					cam.IP = s
 				case "Quality":
 					cam.Quality = s
+				case "MAC":
+					cam.MAC = s
 				}
 			}
 		}
@@ -184,10 +187,16 @@ func (c *Cameras) encode() ([]byte, error) {
 		add("IP", true, nil)
 		add("Quality", cam.Quality != "", nil)
 		add("Record", cam.Record, nil)
+		add("MAC", cam.MAC != "", nil)
 		first := true
 		for _, f := range fields {
 			raw := f.raw
 			switch canonicalCameraKey(f.key) {
+			case "MAC":
+				if cam.MAC == "" {
+					continue
+				}
+				raw = marshalNoEscape(cam.MAC)
 			case "Name":
 				raw = marshalNoEscape(cam.Name)
 			case "IP":
@@ -327,6 +336,8 @@ func (c *Cameras) Collisions() []Collision {
 }
 
 var (
+	macRE     = regexp.MustCompile(`^[0-9a-f]{2}(:[0-9a-f]{2}){5}$`)
+	macLoose  = regexp.MustCompile(`^[0-9A-Fa-f]{1,2}([:-][0-9A-Fa-f]{1,2}){5}$`)
 	streamRE  = regexp.MustCompile(`^[A-Za-z0-9._-]{1,64}$`)
 	hostLabel = regexp.MustCompile(`^[A-Za-z0-9]([A-Za-z0-9-]{0,61}[A-Za-z0-9])?$`)
 )
@@ -349,6 +360,9 @@ func (c *Cameras) Validate() error {
 		if q := strings.TrimSpace(cam.Quality); q != "" && !streamRE.MatchString(q) {
 			add(i, "Quality", "a stream name may use only letters, digits, dot, dash and underscore, got %q", cam.Quality)
 		}
+		if cam.MAC != "" && !macRE.MatchString(cam.MAC) {
+			add(i, "MAC", "a MAC address is six lower-case hex pairs joined by colons, like aa:bb:cc:dd:ee:ff, got %q", cam.MAC)
+		}
 	}
 	for _, col := range c.Collisions() {
 		for _, i := range col.Indexes[1:] {
@@ -359,6 +373,23 @@ func (c *Cameras) Validate() error {
 		return &ValidationError{Problems: probs}
 	}
 	return nil
+}
+
+// NormalizeMAC turns a hardware address as the OS tools print it (colons or dashes, either case,
+// macOS's dropped leading zeros as in 0:1b:2:...) into the cameras.json form aa:bb:cc:dd:ee:ff.
+func NormalizeMAC(s string) (string, bool) {
+	s = strings.TrimSpace(s)
+	if !macLoose.MatchString(s) {
+		return "", false
+	}
+	parts := strings.FieldsFunc(s, func(r rune) bool { return r == ':' || r == '-' })
+	for i, p := range parts {
+		if len(p) == 1 {
+			p = "0" + p
+		}
+		parts[i] = strings.ToLower(p)
+	}
+	return strings.Join(parts, ":"), true
 }
 
 // validateHost accepts an IP literal or a plausible hostname, optionally followed by a port

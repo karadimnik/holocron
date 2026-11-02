@@ -20,6 +20,10 @@ A version is `MAJOR.MINOR.PATCH`, tagged `vMAJOR.MINOR.PATCH`. The public interf
 
 ## [Unreleased]
 
+### Added
+
+- `cameras.json` takes an optional `MAC` per camera (the camera's hardware address, `aa:bb:cc:dd:ee:ff`, validated; absent by default and a camera without it behaves exactly as before). `holocron cam add --mac` and `holocron cam set --mac` set it (`--mac ""` removes it), `cam list` and `cam show` print it, and the web Settings save keeps it.
+
 ## [1.4.3] - 2026-11-03
 
 ### Fixed

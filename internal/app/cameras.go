@@ -135,10 +135,10 @@ func RemoveCamera(path, name string) (config.Camera, error) {
 	return gone, c.Save(path)
 }
 
-// CameraChange is `cam set`: nil fields stay.
+// CameraChange is `cam set`: nil fields stay (an empty MAC removes it).
 type CameraChange struct {
-	Name, IP, Quality *string
-	Record            *bool
+	Name, IP, Quality, MAC *string
+	Record                 *bool
 }
 
 // SetCamera edits one camera's fields, validates the result and saves.
@@ -166,6 +166,9 @@ func SetCamera(path, name string, ch CameraChange) (config.Camera, error) {
 	}
 	if ch.Record != nil {
 		cam.Record = *ch.Record
+	}
+	if ch.MAC != nil {
+		cam.MAC = *ch.MAC
 	}
 	if err := checkOne(c, i); err != nil {
 		return config.Camera{}, err
@@ -216,7 +219,8 @@ func (e *InvalidRows) Unwrap() error { return cli.ErrRefused }
 // PutCameras replaces the whole camera list with rows, in that order (the Settings page's save):
 // every row is validated like `cam add|set` (name as a folder, host or host:port with the port
 // checked, stream, folder collisions) and any problem refuses the lot with *InvalidRows, the file
-// untouched. A row with an OriginalName keeps the fields of that camera the product does not know;
+// untouched. A row with an OriginalName keeps the fields of that camera the page does not show (MAC
+// and the fields the product does not know);
 // cameras missing from rows are removed. A request that changes nothing writes nothing. Returns the
 // number of cameras added, removed or edited (a pure reordering counts 1).
 func PutCameras(path string, rows []CameraRow) (int, error) {

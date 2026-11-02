@@ -79,9 +79,9 @@ Registry: the slice `commands` in `cmd/holocron/commands.go`; `holocron --help` 
 | `status [--json]` | roles, pids, cameras, disk, prune, live view, alerts; exit 0 running, 1 not |
 | `cam list [--json]` | the cameras of cameras.json |
 | `cam show <name> [--json]` | one camera and its recorder state |
-| `cam add --name N --ip HOST [--quality STREAM] [--record]` | add a camera (validated; no credentials here) |
+| `cam add --name N --ip HOST [--quality STREAM] [--record] [--mac MAC]` | add a camera (validated; no credentials here) |
 | `cam remove <name>` | remove a camera (its recordings stay) |
-| `cam set <name> [--name N] [--ip HOST] [--quality STREAM] [--record true\|false]` | change a camera |
+| `cam set <name> [--name N] [--ip HOST] [--quality STREAM] [--record true\|false] [--mac MAC]` | change a camera |
 | `cam enable <name\|all>` | record a camera |
 | `cam disable <name\|all>` | stop recording a camera |
 | `cam test <name>` | TCP connect and RTSP OPTIONS to the camera (5 s, no login) |

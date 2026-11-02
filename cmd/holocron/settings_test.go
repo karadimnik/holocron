@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"holocron/internal/app"
+	"holocron/internal/config"
 	"holocron/internal/osx"
 	"holocron/internal/web"
 )
@@ -162,3 +163,21 @@ func TestWebSettingsRefusalsLeaveTheFilesByteIdentical(t *testing.T) {
 }
 
 func toJSON(v any) string { b, _ := json.Marshal(v); return string(b) }
+
+// docs/ui.md: fields the page does not show are kept. MAC is one: a Settings save of the camera
+// (renamed and re-addressed here) keeps it, and a camera the page adds has none.
+func TestWebSettingsKeepTheCameraMAC(t *testing.T) {
+	r := newRig(t)
+	if _, _, code := r.run("cam", "set", "Front", "--mac", "AA-BB-CC-DD-EE-01"); code != 0 {
+		t.Fatal(code)
+	}
+	base := serveSettings(t, r)
+	code, body := put(t, base+"/api/cameras", `{"cameras":[{"originalName":"Front","name":"Front door","ip":"192.0.2.20","quality":"stream2","record":true},{"originalName":"Back","name":"Back","ip":"192.0.2.11","quality":"","record":false},{"name":"Side","ip":"192.0.2.12","quality":"stream1","record":true}]}`)
+	if code != 200 {
+		t.Fatalf("%d %v", code, body)
+	}
+	c, err := config.LoadCameras(r.cameras())
+	if err != nil || c.List[0].Name != "Front door" || c.List[0].IP != "192.0.2.20" || c.List[0].MAC != "aa:bb:cc:dd:ee:01" || c.List[1].MAC != "" || c.List[2].MAC != "" {
+		t.Errorf("%v %+v", err, c.List)
+	}
+}

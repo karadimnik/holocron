@@ -20,6 +20,7 @@ type camRow struct {
 	IP       string         `json:"ip"`
 	Quality  string         `json:"quality"`
 	Record   bool           `json:"record"`
+	MAC      string         `json:"mac,omitempty"`
 	SafeName string         `json:"safeName"`
 	Problem  string         `json:"problem,omitempty"`
 	Recorder *status.Camera `json:"recorder,omitempty"`
@@ -39,7 +40,7 @@ func camRows(e *env) ([]camRow, error) {
 	}
 	rows := []camRow{}
 	for _, cam := range c.List {
-		r := camRow{Name: cam.Name, IP: cam.IP, Quality: cam.Stream(), Record: cam.Record}
+		r := camRow{Name: cam.Name, IP: cam.IP, Quality: cam.Stream(), Record: cam.Record, MAC: cam.MAC}
 		if s, err := cam.SafeName(); err != nil {
 			r.Problem = err.Error()
 		} else {
@@ -70,7 +71,18 @@ func cmdCamList(ctx context.Context, e *env) error {
 		return printJSON(e.out, rows)
 	}
 	_, running, why := app.Running(e.paths, e.cfg, time.Now())
-	fmt.Fprintf(e.out, "%-20s %-7s %-10s %-16s %s\n", "NAME", "RECORD", "QUALITY", "IP", "RECORDER")
+	macs := false
+	for _, r := range rows {
+		macs = macs || r.MAC != ""
+	}
+	line := func(name, rec, quality, ip, state, mac string) {
+		if macs {
+			fmt.Fprintf(e.out, "%-20s %-7s %-10s %-16s %-11s %s\n", name, rec, quality, ip, state, mac)
+			return
+		}
+		fmt.Fprintf(e.out, "%-20s %-7s %-10s %-16s %s\n", name, rec, quality, ip, state)
+	}
+	line("NAME", "RECORD", "QUALITY", "IP", "RECORDER", "MAC")
 	for _, r := range rows {
 		rec := "off"
 		if r.Record {
@@ -83,7 +95,7 @@ func cmdCamList(ctx context.Context, e *env) error {
 		if r.Problem != "" {
 			state = "PROBLEM: " + r.Problem
 		}
-		fmt.Fprintf(e.out, "%-20s %-7s %-10s %-16s %s\n", r.Name, rec, r.Quality, r.IP, state)
+		line(r.Name, rec, r.Quality, r.IP, state, orDash(r.MAC))
 	}
 	if running {
 		fmt.Fprintln(e.out, "supervisor: running")
@@ -113,7 +125,7 @@ func cmdCamShow(ctx context.Context, e *env) error {
 		if e.json {
 			return printJSON(e.out, r)
 		}
-		fmt.Fprintf(e.out, "name: %s\nfolder: %s\naddress: %s\nstream: %s\nrecord: %v\n", r.Name, orDash(r.SafeName), r.IP, r.Quality, r.Record)
+		fmt.Fprintf(e.out, "name: %s\nfolder: %s\naddress: %s\nstream: %s\nrecord: %v\nmac: %s\n", r.Name, orDash(r.SafeName), r.IP, r.Quality, r.Record, orDash(r.MAC))
 		if r.Problem != "" {
 			fmt.Fprintf(e.out, "problem: %s\n", r.Problem)
 		}
@@ -132,6 +144,7 @@ func cmdCamAdd(ctx context.Context, e *env) error {
 	ip := fs.String("ip", "", "camera address (IP or hostname)")
 	quality := fs.String("quality", "", "stream path (default stream1)")
 	record := fs.Bool("record", false, "record it")
+	mac := fs.String("mac", "", "hardware address, aa:bb:cc:dd:ee:ff (optional; lets cam discover follow a new DHCP address)")
 	pos, err := parseFlags(fs, e.args)
 	if err != nil {
 		return err
@@ -142,7 +155,7 @@ func cmdCamAdd(ctx context.Context, e *env) error {
 	if *name == "" || *ip == "" {
 		return usageErr("holocron cam add: --name and --ip are required")
 	}
-	if err := app.AddCamera(e.paths.Cameras, config.Camera{Name: *name, IP: *ip, Quality: *quality, Record: *record}); err != nil {
+	if err := app.AddCamera(e.paths.Cameras, config.Camera{Name: *name, IP: *ip, Quality: *quality, Record: *record, MAC: macArg(*mac)}); err != nil {
 		return err
 	}
 	fmt.Fprintf(e.out, "added %s (%s, record %v) to %s\n", *name, *ip, *record, e.paths.Cameras)
@@ -173,6 +186,7 @@ func cmdCamSet(ctx context.Context, e *env) error {
 	fs.Func("name", "new name", func(s string) error { ch.Name = &s; return nil })
 	fs.Func("ip", "address", func(s string) error { ch.IP = &s; return nil })
 	fs.Func("quality", "stream path", func(s string) error { ch.Quality = &s; return nil })
+	fs.Func("mac", "hardware address aa:bb:cc:dd:ee:ff (empty removes it)", func(s string) error { m := macArg(s); ch.MAC = &m; return nil })
 	fs.Func("record", "true or false", func(s string) error {
 		b, err := strconv.ParseBool(s)
 		if err != nil {
@@ -189,15 +203,24 @@ func cmdCamSet(ctx context.Context, e *env) error {
 		return err
 	}
 	if ch == (app.CameraChange{}) {
-		return usageErr("holocron cam set: nothing to change (--name, --ip, --quality, --record)")
+		return usageErr("holocron cam set: nothing to change (--name, --ip, --quality, --record, --mac)")
 	}
 	cam, err := app.SetCamera(e.paths.Cameras, pos[0], ch)
 	if err != nil {
 		return err
 	}
-	fmt.Fprintf(e.out, "%s: address %s, stream %s, record %v\n", cam.Name, cam.IP, cam.Stream(), cam.Record)
+	fmt.Fprintf(e.out, "%s: address %s, stream %s, record %v, mac %s\n", cam.Name, cam.IP, cam.Stream(), cam.Record, orDash(cam.MAC))
 	reloadIfRunning(ctx, e)
 	return nil
+}
+
+// macArg is a --mac value in the cameras.json form when it is a MAC in any usual spelling (dashes,
+// upper case); anything else is passed on as given, for the validation to refuse with its reason.
+func macArg(s string) string {
+	if m, ok := config.NormalizeMAC(s); ok {
+		return m
+	}
+	return strings.TrimSpace(s)
 }
 
 func cmdCamRecord(ctx context.Context, e *env, on bool) error {

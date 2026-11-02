@@ -95,8 +95,10 @@ Not preserved on rewrite: this package only reads `holocron.config.json`; the `h
 
 # cameras.json
 
-Array of objects. `Name`, `IP`, `Quality` (strings; blank/absent Quality = `stream1`), `Record` (JSON boolean; absent = off). Every other field is
-kept, in place, across `Save`. Types are checked at load (all problems at once, with `cameras[i].Field` paths); `Validate` checks the meaning
-(a name that `archive.SafeName` refuses, an address, a stream name, folder collisions). The web app's extra limits (48-character names, a required
+Array of objects. `Name`, `IP`, `Quality` (strings; blank/absent Quality = `stream1`), `Record` (JSON boolean; absent = off), `MAC` (optional
+string, the camera's hardware address as six lower-case hex pairs joined by colons, `aa:bb:cc:dd:ee:ff`; absent, `null` or blank = unknown and not
+written back; `config.NormalizeMAC` turns the OS tools' spellings into this form; nothing but `cam discover` reads it, to follow a camera whose DHCP
+address changed). Every other field is kept, in place, across `Save`. Types are checked at load (all problems at once, with `cameras[i].Field` paths); `Validate` checks the meaning
+(a name that `archive.SafeName` refuses, an address, a stream name, a `MAC` not in the form above, folder collisions). The web app's extra limits (48-character names, a required
 stream) stay in the web layer. `Save` is atomic (temp file in the same folder, fsync, rename) and writes a UTF-8 BOM exactly when the file on
 disk has one (a new file: when the list was read from a file that had one).
