@@ -157,6 +157,7 @@ Update this file in the same push as each merge: `git log --first-parent --merge
 | 429cca6 | 2026-11-02 | Merge Holocron R19: macOS Intel release archive (darwin_amd64) and a clearer build-holocron.sh message when Go is missing |  |
 | fa4ce6d | 2026-11-02 | Merge Holocron R20: process inspection on macOS (kinfo_proc via raw sysctl): host.json written, roles registered, doctor no longer misreports, down can stop a detached host. Cross-built and unit-tested on Linux only; NOT run on a Mac |  |
 | 8b84846 | 2026-11-02 | Merge Holocron R21: the Live page plays sub when offered, else main (a camera recorded on the sub stream has no sub path); no dead HD chip in the enlarged view. Rendered with real WebRTC against MediaMTX and a stub web API; not run on the Operator's Mac |  |
+| 8e60a61 | 2026-11-03 | Merge Holocron R22: `holocron config set` takes several key/value pairs applied and validated together (all or nothing); a cross-key refusal names the combined form. Fixes the LiveUdpAddress / LiveAdvertiseHosts deadlock found on the Intel Mac |  |
 
 ## Releases
 
