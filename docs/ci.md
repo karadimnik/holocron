@@ -10,7 +10,7 @@
 | `test (ubuntu-latest)` and `test (windows-latest)` | hosted runners | ffmpeg installed, then `go test -race -count=1 -p 1 -v ./...`, then the opt-in real-process and real-ffmpeg tests (below). A failure here fails the run. |
 | `test (macos-latest)` | hosted runner | The same steps with `continue-on-error`: macOS is paper-only today, so it reports and never fails the run. |
 | `release-check` | ubuntu | `goreleaser check`, then `goreleaser release --snapshot --clean --skip=publish,sign,announce` with the configuration a tag uses (`.goreleaser.yaml`); the four archives and their SBOMs exist, `checksums.txt` verifies, and the linux/amd64 binary's `holocron version` prints the snapshot version. Nothing is uploaded. |
-| `build (target)` | ubuntu | `holocron` (`./cmd/holocron`) compiles for `windows/amd64`, `linux/amd64`, `linux/arm64`, `darwin/arm64`, with `CGO_ENABLED=0`. Nothing is uploaded. |
+| `build (target)` | ubuntu | `holocron` (`./cmd/holocron`) compiles for `windows/amd64`, `linux/amd64`, `linux/arm64`, `darwin/arm64`, `darwin/amd64`, with `CGO_ENABLED=0`. Nothing is uploaded. |
 
 Go comes from `go.mod` (`go-version-file`), so the runner builds with the same minor release the module asks for. `GOTOOLCHAIN=local` keeps `go` from fetching a different one. ffmpeg comes from `apt` (Ubuntu), a pinned Chocolatey package (Windows) and Homebrew (macOS); the product needs 5.0 or later and the step prints the version that was installed. The Chocolatey install is tried up to 3 times, 10 s apart, because a download from its feed fails now and then; only the third failure fails the job.
 
@@ -33,7 +33,7 @@ From WSL or Linux, in the repository root, with the Go version `go.mod` asks for
 test -z "$(gofmt -l cmd internal)"
 for os in linux windows darwin; do GOOS=$os go vet ./...; done
 go test -race -count=1 -p 1 ./...
-for t in windows/amd64 linux/amd64 linux/arm64 darwin/arm64; do CGO_ENABLED=0 GOOS=${t%/*} GOARCH=${t#*/} go build ./cmd/holocron; done
+for t in windows/amd64 linux/amd64 linux/arm64 darwin/arm64 darwin/amd64; do CGO_ENABLED=0 GOOS=${t%/*} GOARCH=${t#*/} go build ./cmd/holocron; done
 ```
 
 `build-holocron.sh` runs `gofmt`, a plain `go vet ./...` and `go test -p 1 ./...` (without `-race`), then cross-builds `holocron.exe` into the repository root. To see what a clean runner sees, run the tests under `env -i` with a throwaway `HOME` and `TMPDIR` and a `PATH` of Go plus `/usr/bin:/bin` (no `/mnt/c`), and once with `TZ` set to a zone that is just past midnight. That the suite does not depend on the machine's zone, clock, home folder or tools is UNVERIFIED here (not re-run for this page). The opt-in step is: set `HOLOCRON_OSX_REAL=1 HOLOCRON_HOST_REAL=1 HOLOCRON_IT=1 HOLOCRON_IT_FFMPEG=/path/to/ffmpeg HOLOCRON_IT_FFPROBE=/path/to/ffprobe` and run `go test -count=1 -p 1 ./internal/ffmpeg ./internal/osx ./internal/host`.

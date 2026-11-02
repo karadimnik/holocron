@@ -4,6 +4,7 @@
 set -euo pipefail
 cd "$(dirname "$0")"
 export PATH="$HOME/.local/go/bin:$PATH"
+command -v go >/dev/null || { echo "go not found: install Go $(awk '/^go /{print $2}' go.mod) (macOS: brew install go; Linux: https://go.dev/dl/). This script builds holocron.exe for Windows; for this machine run: go build ./cmd/holocron"; exit 1; }
 test -z "$(gofmt -l cmd internal)" || { gofmt -l cmd internal; echo "gofmt: files above need formatting"; exit 1; }
 go vet ./...
 go test -p 1 ./...   # one package at a time: the web and real-process suites are heavy
