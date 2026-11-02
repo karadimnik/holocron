@@ -300,3 +300,58 @@ func TestCamerasPortFixtureShape(t *testing.T) {
 		t.Error("port 99999 accepted")
 	}
 }
+
+// MAC is optional: absent behaves as before, a value must be the canonical form, blank is not written,
+// and a camera without one round-trips byte for byte.
+func TestCameraMAC(t *testing.T) {
+	p := writeFile(t, `[{"Name":"Front Door","IP":"192.0.2.10","MAC":"aa:bb:cc:dd:ee:0f","Note":1},{"Name":"Yard","IP":"192.0.2.11","mac":null}]`)
+	c, err := LoadCameras(p)
+	if err != nil || c.List[0].MAC != "aa:bb:cc:dd:ee:0f" || c.List[1].MAC != "" {
+		t.Fatalf("%v %+v", err, c.List)
+	}
+	if err := c.Validate(); err != nil {
+		t.Errorf("valid MAC refused: %v", err)
+	}
+	if _, err := LoadCameras(writeFile(t, `[{"Name":"A","IP":"192.0.2.1","MAC":5}]`)); err == nil || !strings.Contains(err.Error(), "cameras[0].MAC") {
+		t.Errorf("a number as MAC: %v", err)
+	}
+	for _, bad := range []string{"AA:BB:CC:DD:EE:FF", "aa-bb-cc-dd-ee-ff", "aa:bb:cc:dd:ee", "aa:bb:cc:dd:ee:f", "aa:bb:cc:dd:ee:fg", "aabbccddeeff", " aa:bb:cc:dd:ee:ff"} {
+		err := (&Cameras{List: []Camera{{Name: "A", IP: "192.0.2.1", MAC: bad}}}).Validate()
+		var ve *ValidationError
+		if !errors.As(err, &ve) || ve.Problems[0].Path != "cameras[0].MAC" {
+			t.Errorf("%q accepted: %v", bad, err)
+		}
+	}
+	// set, then cleared: written in place, then omitted (the null of the second camera too)
+	c.List[1].MAC = "00:11:22:33:44:55"
+	c.List[0].MAC = ""
+	if err := c.Save(p); err != nil {
+		t.Fatal(err)
+	}
+	raw, _ := os.ReadFile(p)
+	if strings.Contains(string(raw), "aa:bb") || strings.Contains(string(raw), `"MAC"`) || !strings.Contains(string(raw), `"mac": "00:11:22:33:44:55"`) || !strings.Contains(string(raw), `"Note": 1`) {
+		t.Errorf("after save:\n%s", raw)
+	}
+	// a list without MACs saves exactly as before the field existed
+	q := writeFile(t, psCameras)
+	l, _ := LoadCameras(q)
+	l.Save(q)
+	again, _ := os.ReadFile(q)
+	l.Save(q)
+	twice, _ := os.ReadFile(q)
+	if strings.Contains(string(again), "MAC") || !bytes.Equal(again, twice) {
+		t.Errorf("MAC appeared or the save is not stable:\n%s", again)
+	}
+}
+
+func TestNormalizeMAC(t *testing.T) {
+	for in, want := range map[string]string{
+		"aa:bb:cc:dd:ee:ff": "aa:bb:cc:dd:ee:ff", "AA-BB-CC-DD-EE-0F": "aa:bb:cc:dd:ee:0f", "0:1b:2:c:d4:5": "00:1b:02:0c:d4:05",
+		" 90:72:40:b:dc:a1 ": "90:72:40:0b:dc:a1", "aa:bb:cc:dd:ee": "", "aabbccddeeff": "", "(incomplete)": "", "aa:bb:cc:dd:ee:fff": "",
+	} {
+		got, ok := NormalizeMAC(in)
+		if got != want || ok != (want != "") {
+			t.Errorf("NormalizeMAC(%q) = %q %v, want %q", in, got, ok, want)
+		}
+	}
+}

@@ -433,20 +433,21 @@ func errText(s string) string {
 }
 
 // reloadIfRunning asks a running supervisor to re-read its files now (same action id).
-func reloadIfRunning(ctx context.Context, e *env) {
+func reloadIfRunning(ctx context.Context, e *env) { fmt.Fprintln(e.out, reloadMessage(ctx, e)) }
+
+// reloadMessage asks a running supervisor to reload and says what happened.
+func reloadMessage(ctx context.Context, e *env) string {
 	if _, ok, _ := app.Running(e.paths, e.cfg, time.Now()); !ok {
-		fmt.Fprintln(e.out, "the supervisor is not running; the change applies at the next start")
-		return
+		return "the supervisor is not running; the change applies at the next start"
 	}
 	c, err := e.dial(e.paths.Root)
 	if err == nil {
 		err = c.Reload(ctx)
 	}
 	if err != nil {
-		fmt.Fprintf(e.out, "the supervisor did not take a reload (%v); it picks cameras.json up within %gs\n", err, e.cfg.ReconcileSeconds)
-		return
+		return fmt.Sprintf("the supervisor did not take a reload (%v); it picks cameras.json up within %gs", err, e.cfg.ReconcileSeconds)
 	}
-	fmt.Fprintln(e.out, "the running supervisor has reloaded")
+	return "the running supervisor has reloaded"
 }
 
 // dialRunning returns a client when a supervisor is running and its endpoint answers files exist.

@@ -79,11 +79,12 @@ Registry: the slice `commands` in `cmd/holocron/commands.go`; `holocron --help` 
 | `status [--json]` | roles, pids, cameras, disk, prune, live view, alerts; exit 0 running, 1 not |
 | `cam list [--json]` | the cameras of cameras.json |
 | `cam show <name> [--json]` | one camera and its recorder state |
-| `cam add --name N --ip HOST [--quality STREAM] [--record]` | add a camera (validated; no credentials here) |
+| `cam add --name N --ip HOST [--quality STREAM] [--record] [--mac MAC]` | add a camera (validated; no credentials here) |
 | `cam remove <name>` | remove a camera (its recordings stay) |
-| `cam set <name> [--name N] [--ip HOST] [--quality STREAM] [--record true\|false]` | change a camera |
+| `cam set <name> [--name N] [--ip HOST] [--quality STREAM] [--record true\|false] [--mac MAC]` | change a camera |
 | `cam enable <name\|all>` | record a camera |
 | `cam disable <name\|all>` | stop recording a camera |
+| `cam discover [--subnet CIDR ...] [--json] [--save-macs] [--apply]` | find RTSP cameras on this host's private network (TCP 554 + RTSP OPTIONS, no login, at most a /22) and compare with cameras.json: known, new, moved (same MAC elsewhere), missing; --save-macs / --apply write, a dry run without; on macOS run it from Terminal (Local Network privacy) |
 | `cam test <name>` | TCP connect and RTSP OPTIONS to the camera (5 s, no login) |
 | `config get <key> [--json]` | an effective value |
 | `config set <key> <value> [<key> <value> ...]` | change editable keys (all validated together first, written atomically or not at all) |

@@ -95,6 +95,7 @@ type rig struct {
 	auto      *autostart.Env
 	exe       string // this executable as the commands see it
 	doctor    func(*doctorDeps)
+	discover  func(*discoverDeps)
 	extraEnv  map[string]string // more variables the commands see
 }
 
@@ -143,6 +144,7 @@ func (r *rig) run(args ...string) (string, string, int) {
 		exe:       r.exe,
 		auto:      r.auto,
 		doctor:    r.doctorSeams(),
+		discover:  r.discover,
 		stdin: func() io.Reader {
 			if r.stdinR != nil {
 				return r.stdinR
@@ -526,8 +528,50 @@ func TestCamRoundTripKeepsBOMAndUnknownFields(t *testing.T) {
 	if err != nil || len(c.List) != 3 || c.List[2].IP != "127.0.0.1:18700" || c.List[1].IP != "cam.example.com:8554" {
 		t.Errorf("%+v %v", c.List, err)
 	}
-	if out, _, code := r.run("cam", "show", "Gate"); code != 0 || !strings.Contains(out, "127.0.0.1:18700") {
+	if out, _, code := r.run("cam", "show", "Gate"); code != 0 || !strings.Contains(out, "127.0.0.1:18700") || !strings.Contains(out, "mac: -") {
 		t.Errorf("show: %d %s", code, out)
+	}
+}
+
+// The optional MAC: --mac on add and set (any usual spelling, stored lower-case with colons), shown by
+// list and show, kept by a set of another field, removed by an empty value; a malformed one changes nothing.
+func TestCamMAC(t *testing.T) {
+	r := newRig(t)
+	if out, _, code := r.run("cam", "list"); code != 0 || strings.Contains(out, "RECORDER    MAC") {
+		t.Errorf("a list without MACs grew a column: %d\n%s", code, out)
+	}
+	for _, a := range [][]string{{"cam", "add", "--name", "Side", "--ip", "192.0.2.12", "--mac", "AA-BB-CC-DD-EE-02"}, {"cam", "set", "Back", "--mac", "0:1b:2:c:d4:5"}, {"cam", "set", "Back", "--ip", "192.0.2.21"}} {
+		if out, errw, code := r.run(a...); code != 0 {
+			t.Fatalf("%v: %d %s %s", a, code, out, errw)
+		}
+	}
+	c, _ := config.LoadCameras(r.cameras())
+	if c.List[2].MAC != "aa:bb:cc:dd:ee:02" || c.List[1].MAC != "00:1b:02:0c:d4:05" || c.List[1].IP != "192.0.2.21" || c.List[0].MAC != "" {
+		t.Fatalf("%+v", c.List)
+	}
+	if out, _, _ := r.run("cam", "list"); !strings.Contains(out, "RECORDER    MAC") || !strings.Contains(out, "aa:bb:cc:dd:ee:02") {
+		t.Errorf("list:\n%s", out)
+	}
+	if out, _, _ := r.run("cam", "show", "Back"); !strings.Contains(out, "mac: 00:1b:02:0c:d4:05") {
+		t.Errorf("show:\n%s", out)
+	}
+	if out, _, _ := r.run("--json", "cam", "show", "Side"); !strings.Contains(out, `"mac": "aa:bb:cc:dd:ee:02"`) {
+		t.Errorf("json:\n%s", out)
+	}
+	before, _ := os.ReadFile(r.cameras())
+	for _, a := range [][]string{{"cam", "set", "Back", "--mac", "aa:bb:cc"}, {"cam", "add", "--name", "X", "--ip", "192.0.2.30", "--mac", "zz:bb:cc:dd:ee:ff"}} {
+		if out, errw, code := r.run(a...); code != 1 || !strings.Contains(out+errw, "MAC") {
+			t.Errorf("%v: %d %s %s", a, code, out, errw)
+		}
+	}
+	if after, _ := os.ReadFile(r.cameras()); !bytes.Equal(before, after) {
+		t.Error("a refused MAC changed the file")
+	}
+	if _, _, code := r.run("cam", "set", "Side", "--mac", ""); code != 0 {
+		t.Fatal(code)
+	}
+	if b, _ := os.ReadFile(r.cameras()); strings.Contains(string(b), "ee:02") || strings.Count(string(b), `"MAC"`) != 1 {
+		t.Errorf("not removed:\n%s", b)
 	}
 }
 
