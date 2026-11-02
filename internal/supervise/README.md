@@ -113,6 +113,15 @@ is blocked (goroutine dump), so a woken goroutine acts at the virtual time it wa
 - The relay config is rendered from `cameras.json` and written (temp + rename, only when it changed) at every relay
   start, like the live config in PowerShell; PowerShell rewrote the relay file only when its login block was stale.
   While running, a config whose login block no longer matches is rewritten and the relay restarted (not counted).
+- Camera changes reach the MediaMTX children by restart (not counted, no backoff): each child keeps the inputs it took
+  from the camera list at launch (`childInputs`: per path name the camera address and stream, or for live the sub
+  source or relay path; not the order, the comments or the credentials). `publishCameras` signals the relay (capacity-1
+  channel, signals coalesce), every relay start signals the live child, and a child restarts only when the current
+  list differs from its launch inputs (`relay.restart` / `live.restart` with the reason). A list it cannot serve keeps
+  the running child. Rejected alternative: adding or patching paths through the MediaMTX control API would spare the
+  recorders on the relay, but sends camera credentials through the API, leaves the file and the running config
+  apart (a hot reload of the file would drop the API's paths) and needs partial-failure handling. Tests:
+  `sup_cameras_test.go`.
 - The ready set is fetched once per 1 s tick (PowerShell: on a status tick or when a start is due) and shared.
 - `RelayExternal` (new, no PowerShell counterpart): `setup` creates no relay `mtxChild`, and `relayView` answers
   `RelayView{Alive: true, Ready: relay.DeniedReadySet()}` (Denied counts every path as ready) without a process or an API.

@@ -5,12 +5,16 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"maps"
 	"os"
+	"path/filepath"
+	"sort"
 	"strings"
 	"sync"
 	"time"
 
 	"holocron/internal/clock"
+	"holocron/internal/config"
 	"holocron/internal/ffmpeg"
 	"holocron/internal/logx"
 	"holocron/internal/relay"
@@ -31,8 +35,10 @@ type mtxChild struct {
 	stopOnce sync.Once
 	stopCh   chan struct{}
 	done     chan struct{}
+	changed  chan struct{} // the camera list may have changed (capacity 1: signals coalesce)
 
 	// guarded by s.mu
+	inputs      childInputs // what the running child was started with
 	child       *ffmpeg.Child
 	pid         int64
 	lastPid     int64
@@ -47,6 +53,31 @@ type mtxChild struct {
 	lastErrorAt time.Time
 	backoff     int
 	reasonSaid  string
+}
+
+func newMtxChild(s *Supervisor, live bool) *mtxChild {
+	m := &mtxChild{s: s, name: "restreamer", label: "restreamer", log: s.rlog, changed: make(chan struct{}, 1)}
+	if live {
+		m.name, m.label, m.live, m.log = "liveview", "live view", true, s.llog
+	}
+	m.logPath = filepath.Join(s.cfg.RootPath, "_logs", m.name+".log")
+	return m
+}
+
+// action is the log action of this child: relay.<verb> or live.<verb>.
+func (m *mtxChild) action(verb string) string {
+	if m.live {
+		return "live." + verb
+	}
+	return "relay." + verb
+}
+
+// notify tells the child the camera list may have changed; it never blocks.
+func (m *mtxChild) notify() {
+	select {
+	case m.changed <- struct{}{}:
+	default:
+	}
 }
 
 func (m *mtxChild) start() {
@@ -149,7 +180,10 @@ func (m *mtxChild) run() {
 			next = s.clk.Mono() + clock.Mono(time.Duration(wait)*time.Second)
 			continue
 		}
-		recount, stopped := m.watch(child)
+		if !m.live {
+			s.notifyLive() // the live child reads the relay's paths: it follows a camera change only now
+		}
+		restarted, stopped := m.watch(child)
 		if stopped {
 			return
 		}
@@ -159,8 +193,9 @@ func (m *mtxChild) run() {
 		ranFor := nowMono.Sub(m.startedMono)
 		m.alive, m.pid, m.child = false, 0, nil
 		s.mu.Unlock()
-		if !recount {
-			m.log.Info(fmt.Sprintf("%s pid %d stopped to load its rewritten config; starting it again", m.label, m.lastPid), logx.Action("relay.restart"), logx.PID(int(m.lastPid)))
+		if restarted != "" {
+			m.log.Info(fmt.Sprintf("%s pid %d stopped: %s; starting it again", m.label, m.lastPid, restarted),
+				logx.Action(m.action("restart")), logx.Target(m.name), logx.Result(logx.ResultOK), logx.PID(int(m.lastPid)))
 			next = nowMono
 			continue
 		}
@@ -171,7 +206,7 @@ func (m *mtxChild) run() {
 		s.mu.Unlock()
 		wait := m.setBackoff(ranFor.Seconds())
 		m.log.Warn(fmt.Sprintf("%s exit %d after %ds; restart #%d in %ds", m.label, info.Code, roundInt(ranFor.Seconds()), n, wait),
-			logx.Action("relay.restart"), logx.Target(m.name), logx.Result(logx.ResultOK), logx.PID(int(m.lastPid)))
+			logx.Action(m.action("restart")), logx.Target(m.name), logx.Result(logx.ResultOK), logx.PID(int(m.lastPid)))
 		next = nowMono + clock.Mono(time.Duration(wait)*time.Second)
 	}
 }
@@ -187,10 +222,11 @@ func (m *mtxChild) waitCameras() bool {
 	}
 }
 
-// watch waits for the child to exit, for the stop, or (relay) for its config to lose the stored
-// login, in which case the file is rewritten and the child restarted without counting a failure.
-// recount is false for that restart; stopped is true when the child was stopped for good.
-func (m *mtxChild) watch(child *ffmpeg.Child) (recount, stopped bool) {
+// watch waits for the child to exit, for the stop, for a camera change it does not serve yet, or
+// (relay) for its config to lose the stored login. In the last two cases it stops the child and
+// returns why, so the caller starts it again at once without counting a failure; stopped is true
+// when the child was stopped for good.
+func (m *mtxChild) watch(child *ffmpeg.Child) (restarted string, stopped bool) {
 	s := m.s
 	if !m.live {
 		m.waitAPI(child)
@@ -203,18 +239,131 @@ func (m *mtxChild) watch(child *ffmpeg.Child) (recount, stopped bool) {
 		}
 		select {
 		case <-child.Done():
-			return true, false
+			return "", false
 		case <-m.stopCh:
 			m.kill(child, "supervisor shutdown")
-			return false, true
+			return "", true
+		case <-m.changed:
+			if reason := m.cameraChange(); reason != "" {
+				m.kill(child, reason)
+				<-child.Done()
+				return reason, false
+			}
 		case <-tick:
 			if m.rewriteIfStale() {
-				m.kill(child, "its config was rewritten to the stored control API login")
+				reason := "its config was rewritten to the stored control API login"
+				m.kill(child, reason)
 				<-child.Done()
-				return false, false
+				return reason, false
 			}
 		}
 	}
+}
+
+// childInputs is what a MediaMTX child takes from the camera list at launch, by path name. The
+// order of the list and the comments of the rendered file (a camera's name and address) are not
+// inputs, and neither are the camera credentials: they come from the secret store, not cameras.json.
+type childInputs map[string]pathInput
+
+type pathInput struct {
+	camera string // the camera's name, for the log line only
+	source string // where the path's picture comes from: camera address and stream, or a relay path
+}
+
+// inputsOf is the childInputs of a camera list: the relay serves every camera of the list, Record
+// or not (relay.RelayPaths); the live child's sub paths pull the camera's LiveSubStream and its main
+// paths read the relay (relay.LivePaths).
+func (m *mtxChild) inputsOf(cams []config.Camera) (childInputs, error) {
+	in := childInputs{}
+	if m.live {
+		lp, err := relay.LivePaths(cams, m.s.cfg)
+		if err != nil {
+			return nil, err
+		}
+		for _, p := range lp {
+			src := "relay/" + p.RelayPath
+			if p.Kind == relay.LiveSub {
+				src = p.Camera.IP + "/" + m.s.cfg.LiveSubStream
+			}
+			in[p.Name] = pathInput{camera: p.Camera.Name, source: src}
+		}
+		return in, nil
+	}
+	rp, err := relay.RelayPaths(cams)
+	if err != nil {
+		return nil, err
+	}
+	for _, p := range rp {
+		in[p.Name] = pathInput{camera: p.Camera.Name, source: p.Camera.IP + "/" + p.Camera.Stream()}
+	}
+	return in, nil
+}
+
+// cameraChange compares the current camera list with the one the running child was started with:
+// the reason to restart it, or "" when it serves the list as it is. A list the child could not
+// serve keeps the running child (a restart would only fail to start).
+func (m *mtxChild) cameraChange() string {
+	next, err := m.inputsOf(m.s.camerasNow())
+	if err != nil {
+		m.say(slog.LevelWarn, fmt.Sprintf("the camera list cannot be served (%s); the running %s keeps the cameras it was started with", m.s.d.Redactor.String(err.Error()), m.label))
+		return ""
+	}
+	m.s.mu.Lock()
+	prev := m.inputs
+	m.s.mu.Unlock()
+	return prev.changes(next)
+}
+
+// changes describes how next differs from in, by camera name: "" when every path is the same.
+func (in childInputs) changes(next childInputs) string {
+	same := len(in) == len(next)
+	for name, p := range next {
+		if old, ok := in[name]; !ok || old.source != p.source {
+			same = false
+		}
+	}
+	if same {
+		return ""
+	}
+	before, after := in.byCamera(), next.byCamera()
+	var added, removed, changed []string
+	for cam, paths := range after {
+		if old, ok := before[cam]; !ok {
+			added = append(added, cam)
+		} else if !maps.Equal(old, paths) {
+			changed = append(changed, cam)
+		}
+	}
+	for cam := range before {
+		if _, ok := after[cam]; !ok {
+			removed = append(removed, cam)
+		}
+	}
+	var parts []string
+	for _, g := range []struct {
+		what  string
+		names []string
+	}{{"added", added}, {"removed", removed}, {"address or stream changed for", changed}} {
+		if len(g.names) > 0 {
+			sort.Strings(g.names)
+			parts = append(parts, g.what+" "+strings.Join(g.names, ", "))
+		}
+	}
+	if len(parts) == 0 { // paths moved between cameras
+		parts = append(parts, "its paths moved between cameras")
+	}
+	return "camera set changed: " + strings.Join(parts, "; ")
+}
+
+func (in childInputs) byCamera() map[string]map[string]string {
+	out := map[string]map[string]string{}
+	for name, p := range in {
+		if out[p.camera] == nil {
+			out[p.camera] = map[string]string{}
+		}
+		out[p.camera][name] = p.source
+	}
+	return out
 }
 
 // kill is Stop-CamRelayChild / Stop-CamLiveChild: hard kill and a bounded wait.
@@ -288,6 +437,10 @@ func (m *mtxChild) launch() (child *ffmpeg.Child, err error) {
 		}
 	}()
 	cams := s.camerasNow()
+	inputs, err := m.inputsOf(cams)
+	if err != nil {
+		return nil, err
+	}
 	var spec relay.ChildSpec
 	var paths []string
 	var liveCams []status.LiveCamera
@@ -374,7 +527,7 @@ func (m *mtxChild) launch() (child *ffmpeg.Child, err error) {
 	s.mu.Lock()
 	m.child, m.pid, m.lastPid, m.alive, m.starting = child, int64(child.Pid()), int64(child.Pid()), true, false
 	m.startedWall, m.startedMono = s.clk.Now(), s.clk.Mono()
-	m.paths, m.liveCams, m.reasonSaid = paths, liveCams, ""
+	m.paths, m.liveCams, m.inputs, m.reasonSaid = paths, liveCams, inputs, ""
 	s.mu.Unlock()
 	if m.live {
 		m.log.Info(fmt.Sprintf("start live view pid %d: %s serving %d path(s)", child.Pid(), spec.Exe, len(paths)),

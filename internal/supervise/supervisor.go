@@ -481,10 +481,10 @@ func (s *Supervisor) setup(cfg config.Config) error {
 	s.writer = d.Status
 	s.stopFile = filepath.Join(cfg.RootPath, "_state", "stop.request")
 	if cfg.RestreamerEnabled && !cfg.RelayExternal {
-		s.relayM = &mtxChild{s: s, name: "restreamer", label: "restreamer", log: s.rlog, logPath: filepath.Join(cfg.RootPath, "_logs", "restreamer.log")}
+		s.relayM = newMtxChild(s, false)
 	}
 	if cfg.LiveViewEnabled {
-		s.liveM = &mtxChild{s: s, name: "liveview", label: "live view", live: true, log: s.llog, logPath: filepath.Join(cfg.RootPath, "_logs", "liveview.log")}
+		s.liveM = newMtxChild(s, true)
 	}
 	s.pruneView = status.Prune{}
 	return nil
@@ -617,12 +617,26 @@ func (s *Supervisor) requestStop(kind, reason string) {
 	}
 }
 
-// publishCameras stores the latest camera list for the MediaMTX starts.
+// publishCameras stores the latest camera list for the MediaMTX starts and tells the relay, which
+// restarts when it does not serve the list as it is (the live child follows the relay's start).
 func (s *Supervisor) publishCameras(cams []config.Camera) {
 	s.mu.Lock()
 	s.cameras = append([]config.Camera(nil), cams...)
 	s.mu.Unlock()
 	s.camsOnce.Do(func() { close(s.camsReady) })
+	if s.relayM != nil {
+		s.relayM.notify()
+	}
+}
+
+// notifyLive tells the live child, if any, that the camera list may have changed.
+func (s *Supervisor) notifyLive() {
+	s.mu.Lock()
+	m := s.liveM
+	s.mu.Unlock()
+	if m != nil {
+		m.notify()
+	}
 }
 
 func (s *Supervisor) camerasNow() []config.Camera {
