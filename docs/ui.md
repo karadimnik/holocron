@@ -365,7 +365,7 @@ Admins only; its markup and code are in `admin.js`, which only an admin receives
 
 | Section | Does | Command it shares |
 |---|---|---|
-| Health (first) | A badge (HEALTHY, DEGRADED, BROKEN, NOT RUNNING), the time of the run, **Refresh**, "auto refresh every 30 s" (off by default), and a block per group (setup, recording, connections, live, web, storage, system) that is open when it holds a warn or fail; each check with its level, detail and, for warn and fail, the fix command with a Copy button. | `holocron doctor` |
+| Health (first) | A badge (HEALTHY, DEGRADED, STARTING, BROKEN, NOT RUNNING; STARTING has no colour of its own yet and is drawn like NOT RUNNING), the time of the run, **Refresh**, "auto refresh every 30 s" (off by default), and a block per group (setup, recording, connections, live, web, storage, system) that is open when it holds a warn or fail; each check with its level, detail and, for warn and fail, the fix command with a Copy button. | `holocron doctor` |
 | Users | List (name, role, created, locked out), add, set a password, make admin or viewer, unlock, remove. | `holocron user add`, `passwd`, `role`, `remove`, `unlock` |
 | Camera login | Stores the camera user name and password in the secrets store; shows only "present" or "not set". Importing the old `camera_creds.xml` stays on the command line. | `holocron secret set`, `holocron secret import` |
 | Settings keys | Every key of the `config set` allow-list with value, default, rule and whether it needs a restart; edit (validated first) and back to the default. | `holocron config set`, `holocron config unset` |

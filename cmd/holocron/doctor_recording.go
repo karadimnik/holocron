@@ -202,7 +202,7 @@ func recCameras(_ context.Context, r *drun) []check {
 		safe, _ := archive.SafeName(cam.Name)
 		row := r.row(cam.Name)
 		if row == nil {
-			cs = append(cs, mk(lvFail, cam.Name, "set to record, but the supervisor reports no such camera").fix("holocron status ; holocron logs --component supervisor --since 10m (the supervisor reads cameras.json within ReconcileSeconds)"))
+			cs = append(cs, mk(lvFail, cam.Name, "set to record, but the supervisor reports no such camera").fix("holocron status ; holocron logs --component supervisor --since 10m (the supervisor reads cameras.json within ReconcileSeconds)").startup())
 			continue
 		}
 		data := map[string]any{"camera": cam.Name, "alive": row.Alive, "inputMode": row.InputMode, "restartsLastHour": row.RestartsLastHour, "pid": row.Pid}
@@ -336,18 +336,18 @@ func recGrowth(ctx context.Context, r *drun) []check {
 		case !g.Found && g.Err != nil && !os.IsNotExist(g.Err):
 			cs = append(cs, mk(lvFail, cam.Name, "the camera folder cannot be read: %v", g.Err).fix("%s", fix).data(data))
 		case !g.Found:
-			cs = append(cs, mk(lvFail, cam.Name, "not recording: no segment of the last 25 h in %s", r.files(cam).Dir).fix("%s", fix).data(data))
+			cs = append(cs, mk(lvFail, cam.Name, "not recording: no segment of the last 25 h in %s", r.files(cam).Dir).fix("%s", fix).data(data).startup())
 		case g.Err != nil:
 			cs = append(cs, mk(lvWarn, cam.Name, "%s: the size could not be sampled: %v", g.Newest.Name, g.Err).fix("run holocron doctor --group recording again").data(data))
 		case !g.ClosedMTime.IsZero() && r.now.Sub(g.ClosedMTime) <= seg+closedMargin:
 			cs = append(cs, mk(lvWarn, cam.Name, "%s did not grow in %s; the newest closed segment ended %s ago", g.Newest.Name, secs(g.window()), secs(r.now.Sub(g.ClosedMTime))).
-				fix("run holocron doctor --group recording again in a minute; if it repeats: %s", fix).data(data))
+				fix("run holocron doctor --group recording again in a minute; if it repeats: %s", fix).data(data).startup())
 		default:
 			last := g.Newest.MTime
 			if g.ClosedMTime.After(last) {
 				last = g.ClosedMTime
 			}
-			cs = append(cs, mk(lvFail, cam.Name, "not recording: no new data for %s (%s did not grow in %s)", secs(r.now.Sub(last)), g.Newest.Name, secs(g.window())).fix("%s", fix).data(data))
+			cs = append(cs, mk(lvFail, cam.Name, "not recording: no new data for %s (%s did not grow in %s)", secs(r.now.Sub(last)), g.Newest.Name, secs(g.window())).fix("%s", fix).data(data).startup())
 		}
 	}
 	return cs

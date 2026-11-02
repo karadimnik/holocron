@@ -44,6 +44,11 @@ type check struct {
 	Detail string `json:"detail"`
 	Fix    string `json:"fix,omitempty"`
 	Data   any    `json:"data,omitempty"`
+	// StartingUp: the line was a fail or warn that a start still under way explains, reported as a
+	// warning because the supervisor is younger than startupGrace.
+	StartingUp bool `json:"startingUp,omitempty"`
+
+	startupOnly bool // set by startup()
 }
 
 func mk(level, title, format string, a ...any) check {
@@ -52,6 +57,42 @@ func mk(level, title, format string, a ...any) check {
 
 func (c check) fix(format string, a ...any) check { c.Fix = fmt.Sprintf(format, a...); return c }
 func (c check) data(d any) check                  { c.Data = d; return c }
+
+// startup marks a problem that a supervisor still starting explains (a camera not reported yet, a
+// relay or live path not ready yet, no new segment data yet); a steady-state fault is never marked.
+func (c check) startup() check { c.startupOnly = true; return c }
+
+// startupGrace is how long a supervisor counts as starting. The slowest start-up path in the
+// configuration is the relay start wait, then its readiness wait, then a reconcile cycle to start
+// the cameras and a status interval to report them: 45 s with the defaults (20 + 15 + 5 + 5).
+// Twice that leaves time for ffmpeg to connect and write its first bytes, and for one growth sample;
+// never less than 90 s.
+func startupGrace(cfg config.Config) time.Duration {
+	path := float64(cfg.RelayStartupWaitSeconds+cfg.RelayReadyWaitSeconds) + cfg.ReconcileSeconds + cfg.StatusIntervalSeconds
+	return max(90*time.Second, time.Duration(2*path*float64(time.Second)))
+}
+
+// supervisorAge is how long the running supervisor has run: its own uptime at its last heartbeat
+// (UptimeSeconds, a monotonic clock, so a wall-clock step does not change it) plus the heartbeat's
+// age. false when nothing runs or status.json has no uptime: then nothing is softened.
+func (r *drun) supervisorAge() (time.Duration, bool) {
+	if !r.running || r.doc == nil || r.doc.UptimeSeconds == nil {
+		return 0, false
+	}
+	return time.Duration(*r.doc.UptimeSeconds*float64(time.Second)) + r.now.Sub(r.doc.UpdatedAt.Time()), true
+}
+
+// whileStarting is c as a supervisor age old reports it: a problem marked startup is a warning
+// that says to run doctor again.
+func (c check) whileStarting(age time.Duration) check {
+	if !c.startupOnly || (c.Level != lvFail && c.Level != lvWarn) {
+		return c
+	}
+	c.Level, c.StartingUp = lvWarn, true
+	c.Detail = fmt.Sprintf("starting up (%s old): re-run in a minute - %s", secs(age), c.Detail)
+	c.Fix = "run holocron doctor again in a minute; if it repeats: " + c.Fix
+	return c
+}
 
 // doctorCheck is one row of the check table. A concurrent check (a network probe, or one that
 // waits) runs in the bounded pool inside the network budget; the others run one after another.
@@ -167,7 +208,7 @@ func (r *drun) once(key string, build func() any) any {
 }
 
 type doctorSummary struct {
-	Verdict   string `json:"verdict"` // HEALTHY | DEGRADED | BROKEN | NOT RUNNING
+	Verdict   string `json:"verdict"` // HEALTHY | DEGRADED | STARTING | BROKEN | NOT RUNNING
 	Running   bool   `json:"running"`
 	OK        int    `json:"ok"`
 	Info      int    `json:"info"`
@@ -258,6 +299,11 @@ func buildDoctor(ctx context.Context, e *env, sel map[string]bool, deep, inWeb b
 		r.downWhy = "no status file has been written yet"
 	}
 	rep := doctorReport{Schema: 1, Version: version, Root: e.paths.Root, Checks: r.runAll(ctx, sel)}
+	if age, ok := r.supervisorAge(); ok && age < startupGrace(e.cfg) {
+		for i, c := range rep.Checks {
+			rep.Checks[i] = c.whileStarting(age)
+		}
+	}
 	for _, g := range doctorGroups {
 		if sel[g] {
 			rep.Groups = append(rep.Groups, g)
@@ -377,8 +423,9 @@ func timedOut(c doctorCheck, t time.Duration) check {
 
 func summarize(cs []check, running bool, elapsed time.Duration) doctorSummary {
 	s := doctorSummary{Running: running, ElapsedMs: elapsed.Milliseconds()}
-	notRunning := false
+	notRunning, starting := false, false
 	for _, c := range cs {
+		starting = starting || c.StartingUp
 		switch c.Level {
 		case lvOK:
 			s.OK++
@@ -398,6 +445,8 @@ func summarize(cs []check, running bool, elapsed time.Duration) doctorSummary {
 		s.Verdict = "NOT RUNNING"
 	case s.Failures > 0:
 		s.Verdict = "BROKEN"
+	case starting:
+		s.Verdict = "STARTING"
 	case s.Warnings > 0:
 		s.Verdict = "DEGRADED"
 	default:

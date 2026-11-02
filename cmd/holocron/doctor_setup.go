@@ -2,6 +2,8 @@ package main
 
 import (
 	"context"
+	"errors"
+	"io/fs"
 	"net"
 	"os"
 	"os/exec"
@@ -18,6 +20,7 @@ import (
 // setupTable is the doctor of before W19: the environment a start needs.
 var setupTable = []doctorCheck{
 	{id: "setup.configuration", group: "setup", run: setupConfiguration},
+	{id: "setup.cameras", group: "setup", run: setupCameras},
 	{id: "setup.ffmpeg", group: "setup", timeout: 10 * time.Second, run: setupFfmpeg},
 	{id: "setup.mediamtx", group: "setup", timeout: 10 * time.Second, run: setupMediamtx},
 	{id: "setup.ports", group: "setup", run: setupPorts},
@@ -36,6 +39,28 @@ func setupConfiguration(_ context.Context, r *drun) []check {
 		return []check{mk(lvFail, "configuration", "%v", e.loadErr).fix("holocron config validate, then correct %s", e.paths.Config)}
 	}
 	return []check{mk(lvOK, "configuration", "%s (%d warning(s))", e.paths.Config, len(e.warns))}
+}
+
+// setupCameras reads cameras.json as the supervisor does (config.LoadCameras: a missing file is an
+// error, and holocron up exits 21) and validates it as holocron config validate does.
+func setupCameras(_ context.Context, r *drun) []check {
+	path := r.e.paths.Cameras
+	const add = "holocron cam add --name N --ip HOST --record"
+	cams, err := config.LoadCameras(path)
+	if errors.Is(err, fs.ErrNotExist) {
+		return []check{mk(lvFail, "camera list", "no camera list: %s does not exist", path).fix(add)}
+	}
+	if err == nil {
+		err = cams.Validate()
+	}
+	if err != nil {
+		return []check{mk(lvFail, "camera list", "%s: %v", path, err).fix("holocron config validate, then correct %s", path)}
+	}
+	data := map[string]any{"path": path, "cameras": len(cams.List)}
+	if len(cams.List) == 0 {
+		return []check{mk(lvWarn, "camera list", "the camera list is empty: %s", path).fix(add).data(data)}
+	}
+	return []check{mk(lvOK, "camera list", "%d camera(s) in %s", len(cams.List), path).data(data)}
 }
 
 func setupFfmpeg(_ context.Context, r *drun) []check {
