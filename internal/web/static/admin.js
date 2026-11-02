@@ -58,7 +58,7 @@
           <span class="hint">Leave empty to keep the stored one.</span></div>
         <div class="field"><label for="aCamPass">Camera password</label><input id="aCamPass" type="password" autocomplete="new-password">
           <span class="hint">Leave empty to keep the stored one. It is never shown again, here or anywhere.</span></div>
-        <div class="actions"><button class="btn primary" type="submit">Store the camera login</button><span class="formnote" id="aCamNote"></span></div>
+        <div class="actions"><button class="btn primary" type="submit">Store the camera login</button><span class="formnote" id="aCamNote" role="status"></span></div>
       </form>
       <p class="hint">Importing the old <code>camera_creds.xml</code> stays on the command line (<code>holocron secret import</code>): this page never names files on the PC.</p>
     </div>

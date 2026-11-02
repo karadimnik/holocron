@@ -56,3 +56,22 @@ func TestCameraLinesWrapAndSystemPanelSpacing(t *testing.T) {
 		t.Error("style.css lost the rule that removes the paragraph margin in Admin > System")
 	}
 }
+
+// R25: the camera login's note carries the "Restart needed ... run: holocron restart --detach"
+// paragraph under the store lines, so it is announced (a status live region) and keeps its lines.
+func TestCameraLoginNoteIsALiveRegionThatKeepsItsLines(t *testing.T) {
+	js, err := staticFiles.ReadFile("static/admin.js")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(js), `<span class="formnote" id="aCamNote" role="status"></span>`) {
+		t.Error("admin.js: the camera login note is not a role=status live region")
+	}
+	css, err := staticFiles.ReadFile("static/style.css")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(css), "\n#aCamNote{white-space:pre-line}\n") {
+		t.Error("style.css: the camera login note runs its lines together")
+	}
+}

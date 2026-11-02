@@ -130,6 +130,68 @@ func TestSecretImportNeedsAFileAndTellsWhereItLooked(t *testing.T) {
 	}
 }
 
+// R25: a changed camera login reaches a running system only at a restart, so every command that
+// changes it says so and names the command; with nothing running it applies at the next start. Other
+// secrets get no note, and no value is printed.
+func TestCameraLoginChangeSaysWhenItApplies(t *testing.T) {
+	r := newRig(t)
+	r.useFileSecrets()
+	const user, pass = "cam-user-r25", "Cam-Pass-R25-Never-Printed"
+	const nextStart = "Holocron is not running: the camera login applies at the next start."
+	restart := []string{"Restart needed: Holocron is running", "run: holocron restart --detach", "stop it there with Ctrl+C and run holocron up again"}
+	var printed []string
+	run := func(stdin string, args ...string) string {
+		t.Helper()
+		r.stdin = stdin
+		out, errw, code := r.run(args...)
+		if code != 0 {
+			t.Fatalf("%v: exit %d %q %q", args, code, out, errw)
+		}
+		printed = append(printed, out, errw)
+		return out
+	}
+	wantRestart := func(what, out string) {
+		t.Helper()
+		for _, w := range restart {
+			if !strings.Contains(out, w) {
+				t.Errorf("%s: no %q in %q", what, w, out)
+			}
+		}
+		if strings.Contains(out, "not running") {
+			t.Errorf("%s: says not running while running: %q", what, out)
+		}
+	}
+
+	if out := run(user+"\n", "secret", "set", "camera.user"); !strings.Contains(out, nextStart) || strings.Contains(out, "Restart needed") {
+		t.Errorf("set, not running: %q", out)
+	}
+	if out := run("tok\n", "secret", "set", "push.token"); strings.Contains(out, "next start") || strings.Contains(out, "Restart") {
+		t.Errorf("another secret got the note: %q", out)
+	}
+
+	r.running()
+	wantRestart("set camera.password", run(pass+"\n", "secret", "set", "camera.password"))
+	wantRestart("set camera.user", run(user+"\n", "secret", "set", "camera.user"))
+	wantRestart("delete camera.user", run("", "secret", "delete", "camera.user"))
+	if out := run("", "secret", "delete", "push.token"); strings.Contains(out, "Restart") {
+		t.Errorf("deleting another secret got the note: %q", out)
+	}
+
+	r.stopped()
+	if out := run("", "secret", "delete", "camera.password"); !strings.Contains(out, nextStart) || strings.Contains(out, "Restart needed") {
+		t.Errorf("delete, stopped: %q", out)
+	}
+
+	for _, v := range []string{user, pass} {
+		if strings.Contains(strings.Join(printed, "\n"), v) {
+			t.Errorf("%q was printed", v)
+		}
+		if hits := r.leaks(v); len(hits) > 0 {
+			t.Errorf("%q found in %v", v, hits)
+		}
+	}
+}
+
 // The camera login: the environment first, then the configured store; a missing login names both.
 func TestDoctorReadsTheCameraLoginFromTheStore(t *testing.T) {
 	r := newRig(t)

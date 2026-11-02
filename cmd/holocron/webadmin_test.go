@@ -126,7 +126,8 @@ func TestWebAdminRunsTheCommandHelpers(t *testing.T) {
 	if _, body := a.do("GET", "/api/admin/camera-login", ""); body["cameraLogin"].(map[string]any)["password"] != false {
 		t.Errorf("before: %v", body)
 	}
-	if code, body := a.do("POST", "/api/admin/camera-login", `{"user":"`+camUser+`","password":"`+camPass+`"}`); code != 200 || !strings.Contains(body["message"].(string), "stored camera.password (file store)") {
+	if code, body := a.do("POST", "/api/admin/camera-login", `{"user":"`+camUser+`","password":"`+camPass+`"}`); code != 200 || !strings.Contains(body["message"].(string), "stored camera.password (file store)") ||
+		!strings.Contains(body["message"].(string), "not running: the camera login applies at the next start") {
 		t.Fatalf("set the login: %d %v", code, body)
 	}
 	code, body = a.do("GET", "/api/admin/camera-login", "")
@@ -202,5 +203,24 @@ func TestWebAdminRunsTheCommandHelpers(t *testing.T) {
 	os.WriteFile(filepath.Join(r.root, "_logs", "planted.log"), []byte("x "+camPass+" y"), 0o644)
 	if hits := r.leaks(camPass); len(hits) != 1 {
 		t.Errorf("the positive control found %v", hits)
+	}
+}
+
+// R25: a running system keeps the login its children started with, so the page says a restart is
+// needed and which command does it (the page itself cannot restart Holocron).
+func TestWebAdminCameraLoginSaysARestartIsNeededWhileRunning(t *testing.T) {
+	r := newRig(t)
+	r.useFileSecrets()
+	r.running()
+	a := &answers{t: t, base: serveAdmin(t, r)}
+	const camPass = "Cam-Secret-R25-Never-Shown"
+	code, body := a.do("POST", "/api/admin/camera-login", `{"password":"`+camPass+`"}`)
+	msg, _ := body["message"].(string)
+	if code != 200 || !strings.Contains(msg, "stored camera.password (file store)") || !strings.Contains(msg, "Restart needed: Holocron is running") ||
+		!strings.Contains(msg, "run: holocron restart --detach") || !strings.Contains(msg, "Ctrl+C") {
+		t.Fatalf("%d %q", code, msg)
+	}
+	if strings.Contains(strings.Join(a.bodies, ""), camPass) {
+		t.Errorf("the password is in an answer: %v", a.bodies)
 	}
 }

@@ -20,6 +20,10 @@ A version is `MAJOR.MINOR.PATCH`, tagged `vMAJOR.MINOR.PATCH`. The public interf
 
 ## [Unreleased]
 
+### Changed
+
+- A changed camera login now says when it takes effect: `holocron secret set camera.user|camera.password`, `secret delete` of either and `secret import` print, while Holocron is running, that a restart is needed (its relay, live view and any camera recorded directly keep the login they started with) and the command, `holocron restart --detach` (or Ctrl+C and `holocron up` again when it runs in a terminal); with nothing running they say it applies at the next start. The Admin tab's Camera login note says the same, as a status live region.
+
 ## [1.4.2] - 2026-11-03
 
 ### Added
