@@ -161,6 +161,7 @@ Update this file in the same push as each merge: `git log --first-parent --merge
 | ab5e49d | 2026-11-03 | Merge Holocron R24: doctor checks the camera list (missing file fails, empty warns) and reports a supervisor within its start-up grace (90 s) as STARTING (exit 0) instead of BROKEN; real failures stay failures. Fake-clock tested; not yet run on a real start |  |
 | 676130f | 2026-11-03 | Merge Holocron R23: the relay and live view restart themselves when the camera set they serve changes (added, renamed, address or stream); no restart for reorder, Record toggle or comment-only changes. Gap of a few seconds on relay-fed cameras at each such edit accepted by the Operator; fake-clock and race tested, real MediaMTX behaviour NOT measured |  |
 | 1abfe0d | 2026-11-03 | Merge Holocron R25: a changed camera login (secret set/delete/import, Admin camera-login) says whether a restart is needed and the command; web note is a live region |  |
+| cfaa6ab | 2026-11-03 | Merge Holocron R26: `holocron cam discover` (private-subnet scan for the RTSP port, OPTIONS handshake without credentials, ARP MAC, known/new/moved/missing comparison, dry-run by default, `--save-macs`, `--apply`) and the optional `MAC` field in cameras.json. Verified on the Operator's real LAN from WSL (bridged networking) as a dry run: 4 cameras known, 2 missing, 2 unknown RTSP devices found; automatic subnet detection refused on a host with Docker networks (R27) |  |
 
 ## Releases
 
