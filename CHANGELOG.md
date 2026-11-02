@@ -20,6 +20,10 @@ A version is `MAJOR.MINOR.PATCH`, tagged `vMAJOR.MINOR.PATCH`. The public interf
 
 ## [Unreleased]
 
+### Fixed
+
+- macOS: process inspection is implemented (sysctl `kern.proc.pid`, `kern.procargs2`, `kern.proc.all`; it returned "not implemented" before). With it the host writes `host.json`, the web and relay roles are listed for `holocron down`, `down` can stop a detached host, and `holocron doctor` no longer reports a running host as missing or its own web port as held by another program. Cross-compiled for darwin/amd64 and darwin/arm64 and unit-tested on Linux; not yet run on a Mac.
+
 ## [1.4.0] - 2026-11-02
 
 ### Added

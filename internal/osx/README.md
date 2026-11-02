@@ -49,7 +49,7 @@ Drive roots, UNC share roots and `/` are judged structurally by `archive.CheckRo
     func RegistryPath(stateDir) string; func NewRegistry(path) *ChildRegistry
     (r) Load() ([]ChildEntry, error); Add(ChildEntry) error; Remove(pid) error; Entries() []ChildEntry; Reset() error
     type Inspector interface{ Inspect(pid) (ProcInfo, error); Stop(ChildEntry) error }   // OSInspector{}, FakeInspector{Procs}
-    func ListProcs() ([]ProcEntry, error)           // every process: pid, parent pid, name (Linux /proc, Windows Toolhelp; not on macOS); read only, for doctor's stray-process check
+    func ListProcs() ([]ProcEntry, error)           // every process: pid, parent pid, name (Linux /proc, Windows Toolhelp, macOS sysctl kern.proc.all); read only, for doctor's stray-process check
     type ProcInfo struct{ Start, Image string; Group int }; var ErrNotRunning
     func Verify(e ChildEntry, in Inspector, goos string) (ok bool, why string)
     func Reap(reg *ChildRegistry, in Inspector, log *slog.Logger) ([]ReapVerdict, error)  // then the file is emptied
@@ -73,10 +73,12 @@ its own group: a shared group cannot be joined once its leader is gone) + `Pdeat
 `waitid(WNOWAIT)` so the group id is pinned by the zombie; the rest of the group (grandchildren) is killed then, before the reap; a
 `Kill` or `Stop` is `kill(-pgid, ...)` only while the leader is unreaped (no reused group id can be hit). `Stop` = SIGTERM to every
 group, grace, SIGKILL. `Close` ends the starter thread, which takes what is left. **macOS**: `Setpgid` only, no Pdeathsig, no
-`waitid(WNOWAIT)` in Go (a tiny window remains in which a group kill could race the reap); the reap cannot verify anything (start time
-and image need sysctl/proc_pidinfo structures the standard library does not expose) so it leaves every entry alone with a WARN.
-The stdin-pipe watcher was NOT implemented (it needs a self re-exec mode of the command tree, W9). Compiled and vetted for darwin; nothing
-was run on a Mac.
+`waitid(WNOWAIT)` in Go (a tiny window remains in which a group kill could race the reap). Process inspection (`inspect_darwin.go`,
+`procs_darwin.go`) reads sysctl through the raw `__sysctl` system call (the standard library has sysctl only by name, which cannot
+carry a pid): `kern.proc.pid` (struct kinfo_proc: start time, state, process group), `kern.procargs2` (the executable path as handed
+to execve, relative when the process was started by a relative path) and `kern.proc.all` for `ListProcs`; `macproc.go` parses them.
+The stdin-pipe watcher was NOT implemented (it needs a self re-exec mode of the command tree, W9). Compiled and vetted for darwin; the
+parsing of the macOS structures is unit-tested on Linux (`macproc_test.go`); nothing was run on a Mac.
 
 **Lock**: Windows `CreateFile` (share read/write/delete) + `LockFileEx(EXCLUSIVE|FAIL_IMMEDIATELY)` on a byte far beyond the end of
 the file (byte-range locks are mandatory; locking the content would hide the owner text); Unix `flock(LOCK_EX|LOCK_NB)` on an
@@ -84,8 +86,9 @@ the file (byte-range locks are mandatory; locking the content would hide the own
 
 **Registry/reap**: rewritten atomically (temp, fsync, rename; only the supervisor opens it, so the SP6 share-delete rename is not
 needed) after every start and exit. An entry is stopped only if alive AND same start token AND same image (case-insensitive on
-Windows) AND, when recorded, the same group; the kill re-checks on the handle it uses (Windows process handle, Linux pidfd). Tokens:
-Windows creation FILETIME; Linux `<boot_id>:<starttime ticks>`. Never by name, never by pid alone.
+Windows) AND, when recorded, the same group; the kill re-checks on the handle it uses (Windows process handle, Linux pidfd; macOS has no such handle and re-reads the
+identity just before the kill). Tokens: Windows creation FILETIME; Linux `<boot_id>:<starttime ticks>`; macOS `<tv_sec>.<tv_usec>`
+of the start time stored at fork. Never by name, never by pid alone.
 
 **Console** (`console_windows.go`): Go maps close/logoff/shutdown to SIGTERM and, with a `signal.Notify` receiver, its handler BLOCKS
 so the process lives until it exits itself or Windows ends it ~5.04 s after the event (runtime/os_windows.go; SP2). A raw

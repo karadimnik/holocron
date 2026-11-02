@@ -4,5 +4,5 @@ package osx
 type ProcEntry struct {
 	Pid  int
 	PPid int
-	Name string // the executable's base name as the OS lists it (comm on Linux, the image name on Windows)
+	Name string // the executable's base name as the OS lists it (comm on Linux, p_comm on macOS, the image name on Windows)
 }
