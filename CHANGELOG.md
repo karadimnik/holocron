@@ -20,6 +20,8 @@ A version is `MAJOR.MINOR.PATCH`, tagged `vMAJOR.MINOR.PATCH`. The public interf
 
 ## [Unreleased]
 
+## [1.5.0] - 2026-11-03
+
 ### Added
 
 - `cameras.json` takes an optional `MAC` per camera (the camera's hardware address, `aa:bb:cc:dd:ee:ff`, validated; absent by default and a camera without it behaves exactly as before). `holocron cam add --mac` and `holocron cam set --mac` set it (`--mac ""` removes it), `cam list` and `cam show` print it, and the web Settings save keeps it.
@@ -149,7 +151,8 @@ The first version of Holocron in its own repository: a Go network video recorder
 - Builds for Windows (first-class and live), Linux and macOS, cross-compiled and tested in CI.
 - Licence: [PolyForm Noncommercial License 1.0.0](LICENSE) (decision D22).
 
-[Unreleased]: https://github.com/karadimnik/holocron/compare/v1.4.3...HEAD
+[Unreleased]: https://github.com/karadimnik/holocron/compare/v1.5.0...HEAD
+[1.5.0]: https://github.com/karadimnik/holocron/compare/v1.4.3...v1.5.0
 [1.4.3]: https://github.com/karadimnik/holocron/compare/v1.4.2...v1.4.3
 [1.4.2]: https://github.com/karadimnik/holocron/compare/v1.4.1...v1.4.2
 [1.4.1]: https://github.com/karadimnik/holocron/compare/v1.4.0...v1.4.1
