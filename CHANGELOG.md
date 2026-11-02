@@ -20,6 +20,8 @@ A version is `MAJOR.MINOR.PATCH`, tagged `vMAJOR.MINOR.PATCH`. The public interf
 
 ## [Unreleased]
 
+## [1.4.1] - 2026-11-02
+
 ### Fixed
 
 - macOS: process inspection is implemented (sysctl `kern.proc.pid`, `kern.procargs2`, `kern.proc.all`; it returned "not implemented" before). With it the host writes `host.json`, the web and relay roles are listed for `holocron down`, `down` can stop a detached host, and `holocron doctor` no longer reports a running host as missing or its own web port as held by another program. Cross-compiled for darwin/amd64 and darwin/arm64 and unit-tested on Linux; not yet run on a Mac.
@@ -117,7 +119,8 @@ The first version of Holocron in its own repository: a Go network video recorder
 - Builds for Windows (first-class and live), Linux and macOS, cross-compiled and tested in CI.
 - Licence: [PolyForm Noncommercial License 1.0.0](LICENSE) (decision D22).
 
-[Unreleased]: https://github.com/karadimnik/holocron/compare/v1.4.0...HEAD
+[Unreleased]: https://github.com/karadimnik/holocron/compare/v1.4.1...HEAD
+[1.4.1]: https://github.com/karadimnik/holocron/compare/v1.4.0...v1.4.1
 [1.4.0]: https://github.com/karadimnik/holocron/compare/v1.3.2...v1.4.0
 [1.3.2]: https://github.com/karadimnik/holocron/compare/v1.3.1...v1.3.2
 [1.3.1]: https://github.com/karadimnik/holocron/compare/v1.3.0...v1.3.1
