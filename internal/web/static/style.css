@@ -430,6 +430,7 @@ body.authpage{display:grid;place-items:center;min-height:100vh;padding:18px}
 .akeyin{background:var(--surface-2);border:1px solid var(--line);border-radius:8px;color:var(--ink);padding:7px 9px;font:inherit;font-size:13px;width:100%;min-width:9em}
 .akeys .hint{display:block;font-size:11px;color:var(--ink-3);margin-top:4px}
 .akeys .formnote{display:block;margin-top:4px}
+#aCamNote{white-space:pre-line}
 .awarn{color:#f0c27a !important}
 .abreak{word-break:break-all}
 .acheck{display:flex;gap:8px;align-items:center;font-size:13px;color:var(--ink-2)}

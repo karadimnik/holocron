@@ -37,7 +37,7 @@ One page of lookups. First time here: [holocron-quickstart.md](holocron-quicksta
 | remove a user / lift a lockout | `holocron user remove bob`, `holocron user unlock bob` |
 | show the CA to install on a phone / export it | `holocron tls ca` / `holocron tls print --out ca.crt` |
 | show the remote CA (web.remoteHost) to install on a phone, at home only | `holocron tls ca --remote` |
-| store the camera login | `holocron secret set camera.user`, `holocron secret set camera.password` |
+| store the camera login (a running system needs `holocron restart --detach` to use a new one; the command says so) | `holocron secret set camera.user`, `holocron secret set camera.password` |
 | take the login from the old PowerShell system's `camera_creds.xml` (Windows only; the file is left untouched) | `holocron secret import --from C:\old\camera_creds.xml` |
 | list stored secret names (never values) | `holocron secret list` |
 | start at logon: install / status / off / on / remove | `holocron install`, `holocron autostart status`, `holocron autostart disable`, `holocron autostart enable`, `holocron uninstall` |

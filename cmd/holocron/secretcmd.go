@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"path/filepath"
+	"time"
 
 	"holocron/internal/app"
 	"holocron/internal/cli"
@@ -47,7 +48,28 @@ func cmdSecretSet(ctx context.Context, e *env) error {
 	if err != nil {
 		return err
 	}
-	return storeSecret(e, pos[0], value)
+	if err := storeSecret(e, pos[0], value); err != nil {
+		return err
+	}
+	if isCameraLogin(pos[0]) {
+		fmt.Fprintln(e.out, loginChangeNote(e))
+	}
+	return nil
+}
+
+func isCameraLogin(name string) bool {
+	return name == secrets.CameraUserName || name == secrets.CameraPasswordName
+}
+
+// loginChangeNote says when a changed camera login takes effect. The relay and live children get it
+// in their launch environment and a direct recorder in its input list, each only when it starts, and
+// nothing restarts them for a credential change: a running system keeps the old login.
+func loginChangeNote(e *env) string {
+	if _, ok, _ := app.Running(e.paths, e.cfg, time.Now()); !ok {
+		return "Holocron is not running: the camera login applies at the next start."
+	}
+	return "Restart needed: Holocron is running, and its relay, live view and any camera recorded directly keep the camera login they started with until they next start. " +
+		"To apply the change now, run: holocron restart --detach (if holocron up runs in a terminal window, stop it there with Ctrl+C and run holocron up again)."
 }
 
 // storeSecret is `secret set` once the value is read (the Admin tab's camera login calls it too):
@@ -90,6 +112,9 @@ func cmdSecretDelete(ctx context.Context, e *env) error {
 		return failed("%s: %v", pos[0], err)
 	}
 	fmt.Fprintf(e.out, "deleted %s (%s store)\n", pos[0], p.Backend())
+	if isCameraLogin(pos[0]) {
+		fmt.Fprintln(e.out, loginChangeNote(e))
+	}
 	return nil
 }
 
@@ -153,5 +178,6 @@ func cmdSecretImport(ctx context.Context, e *env) error {
 		return failed("%v", err)
 	}
 	fmt.Fprintf(e.out, "imported %s and %s\n", secrets.CameraUserName, secrets.CameraPasswordName)
+	fmt.Fprintln(e.out, loginChangeNote(e))
 	return nil
 }

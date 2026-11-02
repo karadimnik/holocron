@@ -122,11 +122,7 @@ func (w webAdmin) SetCameraLogin(ctx context.Context, user, password string) (st
 			return out.String(), adminErr(err)
 		}
 	}
-	msg := out.String()
-	if _, ok := dialRunning(e); ok {
-		msg += "the recorder is running: holocron restart makes every camera use the new login\n"
-	}
-	return msg, nil
+	return out.String() + loginChangeNote(e) + "\n", nil
 }
 
 func (w webAdmin) PrunePreview(ctx context.Context) (any, error) {

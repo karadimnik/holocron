@@ -84,7 +84,8 @@ type AdminTools interface {
 	SetConfigKey(ctx context.Context, key string, value *string) (message string, invalid []FieldError, err error)
 	// CameraLogin says whether camera.user and camera.password are in the store: never a value.
 	CameraLogin(ctx context.Context) (CameraLoginState, error)
-	// SetCameraLogin is `holocron secret set camera.user|camera.password` (an empty one is kept).
+	// SetCameraLogin is `holocron secret set camera.user|camera.password` (an empty one is kept); the
+	// message ends with the command's note on when the new login takes effect (restart or next start).
 	SetCameraLogin(ctx context.Context, user, password string) (message string, err error)
 	// PrunePreview is `holocron prune --dry-run --json`: the decision, nothing deleted.
 	PrunePreview(ctx context.Context) (any, error)
