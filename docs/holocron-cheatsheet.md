@@ -19,6 +19,8 @@ One page of lookups. First time here: [holocron-quickstart.md](holocron-quicksta
 | record / stop recording all cameras | `holocron cam enable all` / `holocron cam disable all` |
 | change a camera's address or stream | `holocron cam set Garage --ip 192.168.1.50 --quality stream2` |
 | list cameras / test one (TCP and RTSP OPTIONS, no login) | `holocron cam list` / `holocron cam test Garage` |
+| find the cameras on this network (no login; prints a `cam add` line per new one, changes nothing) | `holocron cam discover` / `holocron cam discover --subnet 192.168.1.0/24` |
+| store each answering camera's MAC / follow cameras whose DHCP address changed | `holocron cam discover --save-macs` / `holocron cam discover --apply` |
 | read a config value / change / put back the default | `holocron config get ReserveGB` / `holocron config set ReserveGB 30` / `holocron config unset ReserveGB` |
 | check both config files / see every effective value | `holocron config validate` / `holocron config show` |
 | switch live view on or off (applied at once) | `holocron live enable` / `holocron live disable` |

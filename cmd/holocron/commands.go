@@ -40,6 +40,7 @@ func init() {
 		{path: "cam set", usage: "<name> [--name N] [--ip HOST] [--quality STREAM] [--record true|false] [--mac MAC]", about: "change a camera", action: "camera.set", mutating: true, run: cmdCamSet},
 		{path: "cam enable", usage: "<name|all>", about: "record a camera", action: "camera.enable", mutating: true, run: func(ctx context.Context, e *env) error { return cmdCamRecord(ctx, e, true) }},
 		{path: "cam disable", usage: "<name|all>", about: "stop recording a camera", action: "camera.disable", mutating: true, run: func(ctx context.Context, e *env) error { return cmdCamRecord(ctx, e, false) }},
+		{path: "cam discover", usage: "[--subnet CIDR ...] [--json] [--save-macs] [--apply]", about: "find RTSP cameras on this host's private network (TCP 554 + RTSP OPTIONS, no login, at most a /22) and compare with cameras.json: known, new, moved (same MAC elsewhere), missing; --save-macs / --apply write, a dry run without; on macOS run it from Terminal (Local Network privacy)", action: "camera.discover", mutating: true, run: cmdCamDiscover},
 		{path: "cam test", usage: "<name>", about: "TCP connect and RTSP OPTIONS to the camera (5 s, no login)", action: "camera.test", run: cmdCamTest},
 
 		{path: "config get", usage: "<key> [--json]", about: "an effective value", action: "config.get", run: cmdConfigGet},

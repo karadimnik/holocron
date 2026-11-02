@@ -161,6 +161,7 @@ holocron install                                   # logon task Holocron
 | `holocron doctor` | the health check: ok, warn and fail lines with a fix for each problem |
 | `holocron logs -f` | read and follow `holocron.log` (filter with `--component`, `--level`, `--since`) |
 | `holocron cam add --name "Front Door" --ip 192.168.1.50 --record` | add a camera (validated; the login is a secret, never an argument) |
+| `holocron cam discover` | find the cameras on this network, and follow a camera whose DHCP address changed (`--save-macs`, `--apply`; a dry run without) |
 | `holocron archive stats` | per camera: segments, size, oldest and newest; GB per day, free space, projected days |
 | `holocron alert test` | send a test alert through every channel |
 | `holocron down` / `holocron up --detach` | stop everything and prove it; start again in the background |

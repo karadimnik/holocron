@@ -70,6 +70,18 @@ holocron doctor
 
 Windows keeps the login in the Credential Manager (the `keyring store`), Linux and macOS in an encrypted file with an owner-only key (the `file store`; [configuration](configuration.md)). A `fail` line names its own fix; `warn` lines about a root not claimed yet, a missing status file or nothing running are normal before the first start. On Windows, if the old PowerShell system's login is still in its `camera_creds.xml`, `holocron secret import --from C:\old\camera_creds.xml` prints `imported camera.user and camera.password` and leaves the old file untouched.
 
+**Find your cameras.** Instead of typing each camera, let Holocron look for them on this computer's network (no login is used or sent; nothing is changed):
+
+```bash
+holocron cam discover
+# scanning 192.168.1.0/24: 254 address(es), TCP 554, 800 ms each, 64 at a time
+# ...
+#   new       192.168.1.51          aa:bb:cc:dd:ee:02
+#             holocron cam add --name "Camera 51" --ip 192.168.1.51 --quality stream1 --mac aa:bb:cc:dd:ee:02
+```
+
+Run the printed `holocron cam add` line of each camera you want (rename it with `--name`; add `--record` to record it). Keep the `--mac`: when the router later gives a camera another address, `holocron cam discover` shows it as `moved` and `holocron cam discover --apply` sets the new address. For cameras added without one, `holocron cam discover --save-macs` stores it while they answer. On macOS run it from Terminal ([what the scan can and cannot do](configuration.md#find-cameras-on-the-network)).
+
 ## 4. Start, look, start at login
 
 ```bash

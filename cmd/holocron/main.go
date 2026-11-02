@@ -71,6 +71,7 @@ type env struct {
 	opener     func(url string) error // opens a browser (a fake in tests)
 	auto       autostart.Env          // the OS tools of install / uninstall / autostart (fakes in tests)
 	doctor     func(*doctorDeps)      // replaces doctor's seams (tests)
+	discover   func(*discoverDeps)    // replaces cam discover's seams (tests)
 	sandboxErr error                  // doctor only: the sandbox guard refused the root
 }
 
@@ -137,6 +138,7 @@ type seams struct {
 	opener    func(url string) error
 	auto      *autostart.Env
 	doctor    func(*doctorDeps)
+	discover  func(*discoverDeps)
 }
 
 func run(ctx context.Context, argv []string, out, errw io.Writer, s *seams) int {
@@ -190,7 +192,7 @@ func run(ctx context.Context, argv []string, out, errw io.Writer, s *seams) int 
 		s = &seams{}
 	}
 	e := &env{opts: app.Options{Root: *root, ConfigPath: *cfgPath, Platform: s.platform, Getenv: s.getenv}, json: *jsonOut,
-		out: out, errw: errw, args: args, global: globalArgs(*root, *cfgPath, *v, *vv), dial: s.dial, inspector: s.inspector, exe: s.exe, stdin: s.stdin, opener: s.opener, doctor: s.doctor}
+		out: out, errw: errw, args: args, global: globalArgs(*root, *cfgPath, *v, *vv), dial: s.dial, inspector: s.inspector, exe: s.exe, stdin: s.stdin, opener: s.opener, doctor: s.doctor, discover: s.discover}
 	if *vv {
 		e.opts.Verbose = 2
 	} else if *v {

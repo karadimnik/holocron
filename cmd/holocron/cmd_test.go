@@ -95,6 +95,7 @@ type rig struct {
 	auto      *autostart.Env
 	exe       string // this executable as the commands see it
 	doctor    func(*doctorDeps)
+	discover  func(*discoverDeps)
 	extraEnv  map[string]string // more variables the commands see
 }
 
@@ -143,6 +144,7 @@ func (r *rig) run(args ...string) (string, string, int) {
 		exe:       r.exe,
 		auto:      r.auto,
 		doctor:    r.doctorSeams(),
+		discover:  r.discover,
 		stdin: func() io.Reader {
 			if r.stdinR != nil {
 				return r.stdinR

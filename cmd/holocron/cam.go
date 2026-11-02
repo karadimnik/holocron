@@ -264,7 +264,13 @@ func probeRTSP(ctx context.Context, cam config.Camera, timeout time.Duration) (s
 	return probeRTSPWith(ctx, (&net.Dialer{}).DialContext, cam, timeout)
 }
 
-// probeRTSPWith is probeRTSP through dial (doctor's seam).
+// notRTSPError is a probe whose TCP connect succeeded but whose RTSP OPTIONS did not get an RTSP
+// answer: something listens there, not a camera (cam discover's "port open, not RTSP").
+type notRTSPError struct{ msg string }
+
+func (e *notRTSPError) Error() string { return e.msg }
+
+// probeRTSPWith is probeRTSP through dial (doctor's and cam discover's seam).
 func probeRTSPWith(ctx context.Context, dial func(ctx context.Context, network, addr string) (net.Conn, error), cam config.Camera, timeout time.Duration) (string, error) {
 	addr := rtspTarget(cam)
 	ctx, cancel := context.WithTimeout(ctx, timeout)
@@ -277,15 +283,15 @@ func probeRTSPWith(ctx context.Context, dial func(ctx context.Context, network, 
 	_ = conn.SetDeadline(time.Now().Add(timeout))
 	url := "rtsp://" + addr + "/" + cam.Stream()
 	if _, err := fmt.Fprintf(conn, "OPTIONS %s RTSP/1.0\r\nCSeq: 1\r\nUser-Agent: holocron\r\n\r\n", url); err != nil {
-		return "", fmt.Errorf("RTSP OPTIONS: %v", err)
+		return "", &notRTSPError{fmt.Sprintf("RTSP OPTIONS: %v", err)}
 	}
 	line, err := bufio.NewReader(conn).ReadString('\n')
 	if err != nil {
-		return "", fmt.Errorf("TCP %s open, but no RTSP answer: %v", addr, err)
+		return "", &notRTSPError{fmt.Sprintf("TCP %s open, but no RTSP answer: %v", addr, err)}
 	}
 	line = strings.TrimSpace(line)
 	if !strings.HasPrefix(line, "RTSP/") {
-		return "", fmt.Errorf("TCP %s open, but it does not speak RTSP (%q)", addr, line)
+		return "", &notRTSPError{fmt.Sprintf("TCP %s open, but it does not speak RTSP (%q)", addr, line)}
 	}
 	return line, nil
 }
