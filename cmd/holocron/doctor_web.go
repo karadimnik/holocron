@@ -60,7 +60,7 @@ func webProcess(_ context.Context, r *drun) []check {
 	}
 	w := webStatus(r.e)
 	if !w.Running {
-		return []check{mk(lvFail, "web role", "not running (the host should run it beside the supervisor)").fix("holocron logs --component web --since 10m ; holocron restart --detach")}
+		return []check{mk(lvFail, "web role", "not running (the host should run it beside the supervisor)").fix("holocron logs --component web --since 10m ; holocron restart --detach").startup()}
 	}
 	return []check{mk(lvOK, "web role", "running, pid %d", w.Pid)}
 }
@@ -88,7 +88,7 @@ func webHTTP(ctx context.Context, r *drun) []check {
 		if errors.As(err, &ue) {
 			err = ue.Err
 		}
-		return []check{mk(lvFail, "web http", "GET %s: %v", u, err).fix(fix)}
+		return []check{mk(lvFail, "web http", "GET %s: %v", u, err).fix(fix).startup()}
 	}
 	defer resp.Body.Close()
 	body, _ := io.ReadAll(io.LimitReader(resp.Body, 4<<20))
@@ -128,7 +128,7 @@ func webTLS(ctx context.Context, r *drun) []check {
 	const logs = "holocron logs --component web --since 24h"
 	switch {
 	case err != nil:
-		return []check{mk(lvFail, "https", "no TLS handshake on %s: %v", addr, err).fix("%s ; holocron restart --detach", logs)}
+		return []check{mk(lvFail, "https", "no TLS handshake on %s: %v", addr, err).fix("%s ; holocron restart --detach", logs).startup()}
 	case len(chain) == 0:
 		return []check{mk(lvFail, "https", "%s sent no certificate", addr).fix("%s", logs)}
 	}

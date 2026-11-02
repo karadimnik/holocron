@@ -83,7 +83,7 @@ func storageDisk(_ context.Context, r *drun) []check {
 func storagePrune(_ context.Context, r *drun) []check {
 	p := r.doc.Prune
 	if p == nil {
-		return []check{mk(lvWarn, "pruner", "the supervisor reports no pruner state yet").fix("holocron prune --dry-run")}
+		return []check{mk(lvWarn, "pruner", "the supervisor reports no pruner state yet").fix("holocron prune --dry-run").startup()}
 	}
 	data := map[string]any{"lastRunAt": p.LastRunAt.Time(), "deletedTotal": p.DeletedTotal, "freedGBTotal": p.FreedGBTotal, "blocked": p.Blocked}
 	text := fmt.Sprintf("last run %s, deleted %d file(s), freed %.2f GB in total%s", stamp(p.LastRunAt), p.DeletedTotal, p.FreedGBTotal, errText(p.LastMessage))
@@ -95,7 +95,7 @@ func storagePrune(_ context.Context, r *drun) []check {
 		return []check{mk(lvWarn, "pruner", "the age rule is held by the circuit breaker (alert 122): %s", text).
 			fix("holocron prune --dry-run ; correct MaxRetentionDays, or raise MaxAgePruneFraction (holocron config set MaxAgePruneFraction <0.01-1>)").data(data)}
 	case !r.pruneRecent():
-		return []check{mk(lvWarn, "pruner", "has not run for two intervals (%gs each): %s", r.e.cfg.PruneIntervalSeconds, text).fix("holocron logs --component prune --since 1h").data(data)}
+		return []check{mk(lvWarn, "pruner", "has not run for two intervals (%gs each): %s", r.e.cfg.PruneIntervalSeconds, text).fix("holocron logs --component prune --since 1h").data(data).startup()}
 	}
 	return []check{mk(lvOK, "pruner", "%s", text).data(data)}
 }

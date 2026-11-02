@@ -113,7 +113,7 @@ func connRelay(ctx context.Context, r *drun) []check {
 	}
 	switch {
 	case err != nil && cfg.RestreamerEnabled:
-		return []check{mk(lvFail, "relay", "%s does not answer: %v", which, err).fix("%s ; holocron restart --detach", logs)}
+		return []check{mk(lvFail, "relay", "%s does not answer: %v", which, err).fix("%s ; holocron restart --detach", logs).startup()}
 	case err != nil:
 		return []check{mk(lvWarn, "relay", "%s does not answer: %v", which, err).fix("check the relay this system does not run (RelayExternal), or set RelayApiBase")}
 	case set.State == relay.Denied && cfg.RestreamerEnabled:
@@ -126,7 +126,7 @@ func connRelay(ctx context.Context, r *drun) []check {
 		data := map[string]any{"camera": p.Camera.Name, "path": p.Name, "ready": set.Has(p.Name), "readers": set.Readers(p.Name)}
 		if !set.Has(p.Name) {
 			cs = append(cs, mk(lvFail, p.Camera.Name, "relay path %s is not ready: the relay is not reading the camera", p.Name).
-				fix(`holocron cam test "%s" ; %s`, p.Camera.Name, logs).data(data))
+				fix(`holocron cam test "%s" ; %s`, p.Camera.Name, logs).data(data).startup())
 			continue
 		}
 		cs = append(cs, mk(lvOK, p.Camera.Name, "relay path %s ready, %d reader(s)", p.Name, set.Readers(p.Name)).data(data))
@@ -188,7 +188,7 @@ func connPorts(ctx context.Context, r *drun) []check {
 				err = perr
 			}
 			if err != nil {
-				out[i] = mk(lvFail, w.what, "nothing answers on tcp %s: %v", addr, err).fix("holocron logs --component %s --since 10m ; holocron restart --detach", w.comp)
+				out[i] = mk(lvFail, w.what, "nothing answers on tcp %s: %v", addr, err).fix("holocron logs --component %s --since 10m ; holocron restart --detach", w.comp).startup()
 				return
 			}
 			out[i] = mk(lvOK, w.what, "tcp %s answers", addr)

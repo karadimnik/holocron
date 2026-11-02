@@ -40,9 +40,9 @@ func liveProcess(_ context.Context, r *drun) []check {
 	const fix = "holocron live status ; holocron logs --component live --since 10m"
 	switch {
 	case l == nil || !l.Enabled:
-		return []check{mk(lvFail, "live instance", "LiveViewEnabled is true, but the supervisor runs no live instance").fix("holocron live enable (applied at once while running)")}
+		return []check{mk(lvFail, "live instance", "LiveViewEnabled is true, but the supervisor runs no live instance").fix("holocron live enable (applied at once while running)").startup()}
 	case !l.Alive:
-		return []check{mk(lvFail, "live instance", "not alive%s (%d restart(s))", errText(l.LastError), l.RestartsTotal).fix(fix)}
+		return []check{mk(lvFail, "live instance", "not alive%s (%d restart(s))", errText(l.LastError), l.RestartsTotal).fix(fix).startup()}
 	}
 	return []check{mk(lvOK, "live instance", "alive%s, %d restart(s), WHEP on %s (the live instance has no control API by design: the login probe below talks to its WHEP server)", pidText(l.Pid), l.RestartsTotal, r.e.cfg.LiveWhepAddress)}
 }
@@ -106,7 +106,7 @@ func liveLoginProbe(ctx context.Context, r *drun, webFile, supFile string) []che
 	data["status"] = code
 	switch {
 	case err != nil:
-		return []check{mk(lvFail, title, "the live instance does not answer on %s: %v", r.e.cfg.LiveWhepAddress, err).fix("holocron live status ; holocron logs --component live --since 10m").data(data)}
+		return []check{mk(lvFail, title, "the live instance does not answer on %s: %v", r.e.cfg.LiveWhepAddress, err).fix("holocron live status ; holocron logs --component live --since 10m").data(data).startup()}
 	case code == http.StatusUnauthorized || code == http.StatusForbidden:
 		if sameFile(webFile, supFile) {
 			return []check{mk(lvFail, title, "live login refused, although the web role and the supervisor both use %s: the live instance runs with an older secret", supFile).
@@ -207,7 +207,7 @@ func livePaths(_ context.Context, r *drun) []check {
 		}
 		if len(missing) > 0 {
 			cs = append(cs, mk(lvFail, cam.Name, "live path(s) %s missing from the live instance (has %s)", strings.Join(missing, ", "), orDash(strings.Join(have, ", "))).
-				fix("holocron live status ; holocron logs --component live --since 10m"))
+				fix("holocron live status ; holocron logs --component live --since 10m").startup())
 			continue
 		}
 		cs = append(cs, mk(lvOK, cam.Name, "live path(s) %s present (started on demand when watched)", strings.Join(have, ", ")))

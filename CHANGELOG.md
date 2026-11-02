@@ -24,6 +24,10 @@ A version is `MAJOR.MINOR.PATCH`, tagged `vMAJOR.MINOR.PATCH`. The public interf
 
 - `holocron doctor` checks the camera list (`setup.cameras`): it reads `cameras.json` as the supervisor does and fails when the file does not exist (fix: `holocron cam add --name N --ip HOST --record`) or is invalid (the message `holocron config validate` prints), warns when the list is empty, and says how many cameras it holds otherwise. Before, doctor said `ok configuration` for a setup that `holocron up` then refused (exit 21).
 
+### Changed
+
+- `holocron doctor` right after a start says `STARTING` instead of `BROKEN`: while the supervisor is younger than its start-up grace (90 s with the default relay waits, longer when they are raised), the problems only a start explains (a camera not reported yet, a relay or live path not ready, a listener not up, no new footage yet, no pruner run yet) are warnings reading `starting up (N s old): re-run in a minute`, with `startingUp: true` in `--json`, and the verdict is `STARTING` (exit 0, as `DEGRADED`). Any other failure still makes it `BROKEN` (exit 1), and after the grace the same problems fail as before.
+
 ## [1.4.1] - 2026-11-02
 
 ### Fixed
