@@ -12,6 +12,7 @@ import (
 
 	"holocron/internal/config"
 	"holocron/internal/logx"
+	"holocron/internal/relay"
 )
 
 func TestEventRingParsesRecords(t *testing.T) {
@@ -136,7 +137,7 @@ func TestSupervisorReconcileKeepsSetOnError(t *testing.T) {
 	r.src.err = nil
 	r.src.cams = append(oneCamera("Front"), config.Camera{Name: "Back", IP: "192.0.2.11", Record: true})
 	r.src.mu.Unlock()
-	r.api.setReady(r.api.set) // unchanged
+	r.api.setReady(relay.NewReadySet([]string{"front", "back"})) // the relay restarted for Back serves it
 	r.step(7 * time.Second)
 	if len(r.st.of("ffmpeg", "Back")) != 1 {
 		t.Errorf("the enabled camera did not start\n%s", r.logText())

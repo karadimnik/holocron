@@ -20,6 +20,10 @@ A version is `MAJOR.MINOR.PATCH`, tagged `vMAJOR.MINOR.PATCH`. The public interf
 
 ## [Unreleased]
 
+### Fixed
+
+- A camera added, renamed, re-addressed or given another stream (Settings, `holocron cam add`/`set`, or an edit of `cameras.json`) is now served by the relay and live view at the next reconcile (`ReconcileSeconds`, 5 s by default) without `holocron restart`: before, the relay kept the cameras it was started with, so the camera's relay path was "not ready" and its live view failed. The supervisor restarts the relay only when the paths it serves or their camera address or stream changed, and the live view only when its own paths or sources did (once each, logged as `relay.restart` / `live.restart` with the reason); a reordered list, a `Record` toggle or a rename that keeps the path name restarts nothing. A relay restart interrupts every recorder that reads through the relay: by the supervisor's design each one is restarted and held until the restarted relay serves its path (at most `RelayReadyWaitSeconds`), so expect a gap of a few seconds in every camera's recording at such an edit (from the code; not yet measured against a real MediaMTX).
+
 ## [1.4.2] - 2026-11-03
 
 ### Added

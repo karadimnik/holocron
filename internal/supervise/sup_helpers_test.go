@@ -227,10 +227,11 @@ func (a *fakeAPI) WaitStarted(ctx context.Context, p relay.ReadinessPolicy, exit
 // ---- fake config source ----
 
 type fakeSource struct {
-	mu   sync.Mutex
-	cfg  config.Config
-	cams []config.Camera
-	err  error
+	mu    sync.Mutex
+	cfg   config.Config
+	cams  []config.Camera
+	err   error
+	reads int // Cameras calls: one per reconcile
 }
 
 func (f *fakeSource) Config() (config.Config, error) {
@@ -241,7 +242,13 @@ func (f *fakeSource) Config() (config.Config, error) {
 func (f *fakeSource) Cameras() ([]config.Camera, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
+	f.reads++
 	return append([]config.Camera(nil), f.cams...), f.err
+}
+func (f *fakeSource) cameraReads() int {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return f.reads
 }
 func (f *fakeSource) setCameras(c []config.Camera) {
 	f.mu.Lock()

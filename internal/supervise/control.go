@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"path/filepath"
 	"time"
 
 	"holocron/internal/config"
@@ -84,7 +83,7 @@ func (s *Supervisor) setLive(on bool) {
 	switch {
 	case stopping:
 	case on && cur == nil:
-		m := &mtxChild{s: s, name: "liveview", label: "live view", live: true, log: s.llog, logPath: filepath.Join(s.cfg.RootPath, "_logs", "liveview.log")}
+		m := newMtxChild(s, true)
 		s.mu.Lock()
 		s.liveM = m
 		s.mu.Unlock()
