@@ -20,6 +20,10 @@ A version is `MAJOR.MINOR.PATCH`, tagged `vMAJOR.MINOR.PATCH`. The public interf
 
 ## [Unreleased]
 
+### Added
+
+- `holocron config set` takes several `<key> <value>` pairs in one command (`holocron config set LiveUdpAddress 0.0.0.0:8189 LiveAdvertiseHosts '["192.168.1.50"]'`): they are applied to one copy, validated once as a whole and written atomically only if all of it is valid, so keys that are valid only together (LAN live view) can be set without hand-editing `holocron.config.json`. A refused command writes nothing; a key given twice is refused. A single-key refusal by a rule across keys now ends with the combined form.
+
 ## [1.4.1] - 2026-11-02
 
 ### Fixed

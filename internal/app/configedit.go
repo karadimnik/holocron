@@ -8,6 +8,7 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"slices"
 	"sort"
 	"strings"
 
@@ -180,13 +181,17 @@ func EditConfig(path, key string, value json.RawMessage, plat osx.Platform) (Con
 
 // EditConfigMany applies several edits as one: all keys are checked against the allow-list, the
 // whole edited document is validated once, and the file is written once (or not at all: any
-// refusal leaves it byte-identical). A refusal for a document problem wraps the *config.ValidationError.
+// refusal leaves it byte-identical). A key given twice is refused. A refusal for a document problem
+// wraps the *config.ValidationError.
 func EditConfigMany(path string, edits []KeyValue, plat osx.Platform) ([]ConfigEdit, error) {
 	canons := make([]string, len(edits))
 	for i, kv := range edits {
 		canon, err := CanonicalKey(kv.Key)
 		if err != nil {
 			return nil, err
+		}
+		if slices.Contains(canons[:i], canon) {
+			return nil, cli.Refuse("%s is given twice: give each key once", canon)
 		}
 		canons[i] = canon
 	}

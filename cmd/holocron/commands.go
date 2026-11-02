@@ -43,7 +43,7 @@ func init() {
 		{path: "cam test", usage: "<name>", about: "TCP connect and RTSP OPTIONS to the camera (5 s, no login)", action: "camera.test", run: cmdCamTest},
 
 		{path: "config get", usage: "<key> [--json]", about: "an effective value", action: "config.get", run: cmdConfigGet},
-		{path: "config set", usage: "<key> <value>", about: "change an editable key (validated first, written atomically)", action: "config.set", mutating: true, run: cmdConfigSet},
+		{path: "config set", usage: "<key> <value> [<key> <value> ...]", about: "change editable keys (all validated together first, written atomically or not at all)", action: "config.set", mutating: true, run: cmdConfigSet},
 		{path: "config unset", usage: "<key>", about: "back to the default", action: "config.unset", mutating: true, run: cmdConfigUnset},
 		{path: "config validate", about: "check holocron.config.json and cameras.json", action: "config.validate", run: cmdConfigValidate},
 		{path: "config show", usage: "[--json]", about: "the effective configuration (secrets masked)", action: "config.show", run: cmdConfigShow},
