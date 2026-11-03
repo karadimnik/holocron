@@ -20,6 +20,10 @@ A version is `MAJOR.MINOR.PATCH`, tagged `vMAJOR.MINOR.PATCH`. The public interf
 
 ## [Unreleased]
 
+### Changed
+
+- Docs: live video in Firefox on a Mac is confirmed with a LAN media address (`LiveUdpAddress` `0.0.0.0:8189` plus `LiveAdvertiseHosts`); the earlier "unverified" wording is replaced.
+
 ## [1.5.0] - 2026-11-03
 
 ### Added
