@@ -136,7 +136,7 @@ func TestPruneNowDeletesOnlyWhatTheGatesAllow(t *testing.T) {
 	if _, errw, code := r.run("prune", "--now", "--yes"); code != 1 || !strings.Contains(errw, "outside the sandbox") {
 		t.Errorf("outside the sandbox: %d %q", code, errw)
 	}
-	t.Setenv("SANDBOX_ONLY", "1")
+	t.Setenv("SANDBOX_ONLY", pruneSandbox())
 	for _, f := range old {
 		if !exists(f) {
 			t.Fatalf("the sandbox gate let %s go", f)

@@ -27,9 +27,14 @@ import (
 	"holocron/internal/status"
 )
 
-// TestMain: every prune path in this package's tests is held inside the OS temp dir.
+// TestMain: every prune path in this package's tests is held inside the folder t.TempDir uses,
+// the OS temp dir or GOTMPDIR (when go test has one, "1" would name only the first).
 func TestMain(m *testing.M) {
-	os.Setenv(prune.SandboxEnv, "1")
+	if d := os.Getenv("GOTMPDIR"); d != "" {
+		os.Setenv(prune.SandboxEnv, d)
+	} else {
+		os.Setenv(prune.SandboxEnv, "1")
+	}
 	os.Exit(m.Run())
 }
 

@@ -28,8 +28,17 @@ import (
 
 func TestMain(m *testing.M) {
 	os.Setenv(app.SandboxEnv, "1")
-	os.Setenv("SANDBOX_ONLY", "1") // internal/prune's own sandbox: the executor deletes only under the OS temp folder
+	os.Setenv("SANDBOX_ONLY", pruneSandbox()) // internal/prune's own sandbox: the executor deletes only under the test temp folder
 	os.Exit(m.Run())
+}
+
+// pruneSandbox is the SANDBOX_ONLY value that holds the pruner inside the folder t.TempDir uses:
+// the OS temp folder ("1"), or GOTMPDIR when go test has one, which "1" would not cover.
+func pruneSandbox() string {
+	if d := os.Getenv("GOTMPDIR"); d != "" {
+		return d
+	}
+	return "1"
 }
 
 // fakeCtl records the calls and the action ids they carried.
