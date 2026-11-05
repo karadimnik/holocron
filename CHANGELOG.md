@@ -20,9 +20,13 @@ A version is `MAJOR.MINOR.PATCH`, tagged `vMAJOR.MINOR.PATCH`. The public interf
 
 ## [Unreleased]
 
+## [1.7.0] - 2026-11-05
+
 ### Added
 
-- Bandwidth: the Live tab shows a subtle chip with the page's current receive rate (for example `1.8 Mb/s`) while video plays. Each page reports its rate and the bytes it received with the status check-in it already sends; Holocron sums them in memory only (no disk write, connection or MediaMTX API). Admins get the current combined rate, the total since the web app started and the home-network / internet split in `GET /api/admin/sessions` (`bandwidth`), on the Dashboard and in `holocron user sessions [--json]`. Implausible reports are ignored and counted ([docs/ui.md](docs/ui.md#how-much-video-the-viewers-receive)).
+- Bandwidth on the Live tab: a subtle chip beside the camera count shows the page's current receive rate (for example `1.8 Mb/s`) while video plays. It shows for every signed-in user, a viewer included, and is hidden when nothing plays and in fullscreen.
+- Bandwidth for admins: the combined current rate of everyone watching, the total since the web app started and the split between the home network and the internet. They are in the new admin-only **Who's online** section of the Dashboard, in `GET /api/admin/sessions` (`bandwidth`) and in `holocron user sessions [--json]`.
+- How it is measured: each open page reports the rate and the bytes it received with the status check-in it already sends, so the figures are as the browsers report them. Holocron sums them in memory only (no disk write, no new connection or timer, no MediaMTX API) and ignores implausible reports, counting them. Recording traffic, viewers on another program (VLC, a phone app) and frozen browser tabs are not included, and the total is lost when the web app restarts ([docs/ui.md](docs/ui.md#how-much-video-the-viewers-receive)).
 
 ### Changed
 
@@ -173,7 +177,8 @@ The first version of Holocron in its own repository: a Go network video recorder
 - Builds for Windows (first-class and live), Linux and macOS, cross-compiled and tested in CI.
 - Licence: [PolyForm Noncommercial License 1.0.0](LICENSE) (decision D22).
 
-[Unreleased]: https://github.com/karadimnik/holocron/compare/v1.6.0...HEAD
+[Unreleased]: https://github.com/karadimnik/holocron/compare/v1.7.0...HEAD
+[1.7.0]: https://github.com/karadimnik/holocron/compare/v1.6.0...v1.7.0
 [1.6.0]: https://github.com/karadimnik/holocron/compare/v1.5.0...v1.6.0
 [1.5.0]: https://github.com/karadimnik/holocron/compare/v1.4.3...v1.5.0
 [1.4.3]: https://github.com/karadimnik/holocron/compare/v1.4.2...v1.4.3
