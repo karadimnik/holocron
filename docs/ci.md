@@ -2,6 +2,25 @@
 
 `.github/workflows/ci.yml` runs on every push to the `main` branch and on a manual run (Actions tab, "Run workflow"). It lives on that branch only. It has no secrets, a read-only token (`permissions: contents: read`), no pull-request or schedule trigger, and cancels an older run of the same ref when a newer push arrives. Third-party actions are pinned to a commit SHA, with the version in a comment.
 
+## When it does not run
+
+A push to `main` whose changed files are all in the `paths-ignore` list of `ci.yml` starts no run (about 20 minutes of three hosted runners saved for a change that cannot alter a result). `paths-ignore` looks at the whole push, not at the last commit: if any file of any commit in the push is not listed, the full run starts. A manual run (Actions tab, "Run workflow", `workflow_dispatch`) is never filtered.
+
+| Ignored | Why nothing reads it |
+| --- | --- |
+| `.gitignore`, in any folder (`tasks/holocron/.gitignore` too) | Only `git status` and `git add` read it; no Go test, job or GoReleaser step does. |
+| `.DS_Store` | macOS Finder metadata; already in `.gitignore`. |
+| `.github/dependabot.yml` | Read by GitHub's Dependabot only. No test or workflow names it; `docs/ci.md` mentions it without a link. |
+| `tests/stress/**` files ending `.ps1`, `.py`, `.html`, `.json`, `.gz`, `.png` | The stress-test testbed and its recorded data. No Go file refers to `tests/stress`, and no Markdown links to these files (checked: the only links into the folder are to `tests/stress/live-view/README.md`). |
+
+Deliberately **not** ignored, because something reads them:
+
+- **Every `*.md` file and `llms.txt`**, including `docs/`, `tasks/`, `README.md` and the Markdown under `tests/stress/`: `TestDocLinksResolve` walks every Markdown file in the repository and checks its relative links and anchors; `TestAgentDocCommandTable` and the drift guard read the command documents; `TestReadmePinsReleasedVersion` reads `README.md` and `CHANGELOG.md`.
+- `CHANGELOG.md` (also the release guard's source of release notes), `LICENSE` and `README.md` (packed into every release archive by `.goreleaser.yaml`, built by `release-check`).
+- `.gitattributes` (decides the line endings the tests see), `.goreleaser.yaml`, `build-holocron.sh`, `go.mod`, `testdata/`, and everything under `.github/` except `dependabot.yml`: `.github/rulesets/protect-release-tags.json` is linked from `docs/releasing.md`, so deleting or renaming it breaks `TestDocLinksResolve`.
+
+**A release commit always runs CI.** Cutting a release moves the `[Unreleased]` lines into a new `## [X.Y.Z]` section of `CHANGELOG.md` and updates the README's pinned version in the same commit ([releasing.md](releasing.md)); both files are outside the ignore list, so that push starts the run the release waits for. Only a commit pushed after it could lack a run (a push of nothing but ignored files): tag the commit whose run is green, or start a manual run on `main` first ([releasing.md](releasing.md)).
+
 ## What runs
 
 | Job | Where | What it proves |
