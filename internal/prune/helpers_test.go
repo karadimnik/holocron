@@ -20,12 +20,22 @@ import (
 )
 
 // Every test in this package runs with the sandbox guard on: the executor refuses any root or
-// file outside the OS temporary directory, where t.TempDir lives.
+// file outside the folder where t.TempDir lives. That is the OS temporary directory, or GOTMPDIR
+// when go test is given one: "1" would name only the first, so the prefix is spelled out.
 func TestMain(m *testing.M) {
 	if os.Getenv(SandboxEnv) == "" {
-		os.Setenv(SandboxEnv, "1")
+		os.Setenv(SandboxEnv, testTempBase())
 	}
 	os.Exit(m.Run())
+}
+
+// testTempBase is the folder t.TempDir creates in: GOTMPDIR when go test has one, else the OS
+// temporary directory. Tests that build a path outside t.TempDir start from it too.
+func testTempBase() string {
+	if d := os.Getenv("GOTMPDIR"); d != "" {
+		return d
+	}
+	return os.TempDir()
 }
 
 // Test files are small: unit physical bytes stand for one GB (as the PowerShell checks do), so

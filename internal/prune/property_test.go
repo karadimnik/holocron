@@ -371,7 +371,7 @@ func checkPlan(in Inputs, d Decision) []string {
 
 func runProperty(t *testing.T, n int, seed uint64) (violations int, first string) {
 	rng := rand.New(rand.NewPCG(seed, seed^0x9e3779b97f4a7c15))
-	root := filepath.Join(os.TempDir(), "holocron-prop", "archive")
+	root := filepath.Join(testTempBase(), "holocron-prop", "archive")
 	deleted, refusedClock, held, blocked, removed, skipped, failed := 0, 0, 0, 0, 0, 0, 0
 	for i := 0; i < n; i++ {
 		g := generate(rng, root)

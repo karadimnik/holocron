@@ -23,7 +23,7 @@ func TestRoundGBIsHalfToEven(t *testing.T) {
 // The tie feeds a decision: 10.125 GB free against a 10.13 GB reserve is 10.12 < 10.13 with
 // banker's rounding (PowerShell) and would be 10.13, not below, rounding half up.
 func TestWatermarkRoundingTie(t *testing.T) {
-	cam := filepath.Join(os.TempDir(), "tie", "archive", "Cam_A")
+	cam := filepath.Join(testTempBase(), "tie", "archive", "Cam_A")
 	in := Inputs{Root: filepath.Dir(cam), Now: testNow, FreeBytes: uint64(10.125 * gib),
 		Rules: Rules{ReserveGB: 10.13, Container: ".mkv", SegmentSeconds: 900, StallFactor: 2.5},
 		Cameras: []Camera{{Dir: cam, Files: []File{
@@ -64,7 +64,7 @@ func TestNetFixed(t *testing.T) {
 
 // IR U5: equal write times are ordered by file name, then folder.
 func TestEqualWriteTimesOrderByName(t *testing.T) {
-	root := filepath.Join(os.TempDir(), "u5", "archive")
+	root := filepath.Join(testTempBase(), "u5", "archive")
 	at := testNow.Add(-3 * day)
 	mk := func(cam string, names ...time.Time) Camera {
 		c := Camera{Dir: filepath.Join(root, cam)}
@@ -219,7 +219,7 @@ func TestNeverRemovesADirectory(t *testing.T) {
 }
 
 func TestSandboxGuard(t *testing.T) {
-	tmp := os.TempDir()
+	tmp := testTempBase()
 	inside := filepath.Join(t.TempDir(), "archive")
 	if err := CheckSandbox(inside, tmp); err != nil {
 		t.Fatalf("a t.TempDir root was refused: %v", err)

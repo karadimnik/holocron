@@ -321,7 +321,7 @@ func TestArchiveMigrateGates(t *testing.T) {
 	if rep := decodeLayout(t, out); code != 1 || !strings.Contains(rep.Refused, "outside the sandbox") || rep.Fix == "" || rep.Moved != 0 {
 		t.Errorf("outside the sandbox: %d %+v", code, rep)
 	}
-	t.Setenv("SANDBOX_ONLY", "1")
+	t.Setenv("SANDBOX_ONLY", pruneSandbox())
 	if d := manifestDiff(before, manifest(t, r.root)); len(d) != 0 {
 		t.Fatalf("a refused run changed the tree: %v", d)
 	}
