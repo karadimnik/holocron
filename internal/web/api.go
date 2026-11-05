@@ -136,6 +136,7 @@ func (a *API) Routes(mux *http.ServeMux) {
 }
 
 func (a *API) handleStatus(w http.ResponseWriter, r *http.Request) {
+	a.noteBandwidth(r) // the page's bandwidth report, when its check-in carries one (bandwidth.go)
 	body := StatusResponse{
 		Schema:     1,
 		ServerTime: time.Now().Format(time.RFC3339),

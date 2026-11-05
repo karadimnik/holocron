@@ -20,6 +20,14 @@ A version is `MAJOR.MINOR.PATCH`, tagged `vMAJOR.MINOR.PATCH`. The public interf
 
 ## [Unreleased]
 
+### Added
+
+- Bandwidth: the Live tab shows a subtle chip with the page's current receive rate (for example `1.8 Mb/s`) while video plays. Each page reports its rate and the bytes it received with the status check-in it already sends; Holocron sums them in memory only (no disk write, connection or MediaMTX API). Admins get the current combined rate, the total since the web app started and the home-network / internet split in `GET /api/admin/sessions` (`bandwidth`), on the Dashboard and in `holocron user sessions [--json]`. Implausible reports are ignored and counted ([docs/ui.md](docs/ui.md#how-much-video-the-viewers-receive)).
+
+### Changed
+
+- The "Online now" strip under the tabs is replaced by an admin-only **Who's online** section on the Dashboard; the Admin tab's table stays.
+
 ## [1.6.0] - 2026-11-05
 
 ### Added

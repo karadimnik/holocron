@@ -107,7 +107,7 @@ Registry: the slice `commands` in `cmd/holocron/commands.go`; `holocron --help` 
 | `user role <name> admin\|viewer [--auth-dir D]` | change a user's role and end that user's sessions (the last admin cannot be demoted) |
 | `user remove <name> [--force] [--auth-dir D]` | remove a user and its sessions (not the last admin while other users remain; the last user only with --force while web.tlsListen is set) |
 | `user list [--json] [--auth-dir D]` | names, role and creation time (never hashes) |
-| `user sessions [--json]` | who is signed in and who is watching which camera, asked of the running web app on its loopback listener (live memory, not the session file; says so when the app is not running) |
+| `user sessions [--json]` | who is signed in, who is watching which camera and how much video they receive, asked of the running web app on its loopback listener (live memory, not the session file; says so when the app is not running) |
 | `user unlock <name> [--auth-dir D]` | lift a sign-in lockout in a running web app |
 | `tls ca [--remote] [--json] [--tls-dir D]` | the local CA (--remote: the remote CA of web.remoteHost): file, SHA-256 fingerprint and the steps to install it on a device (created when absent) |
 | `tls print [--out FILE] [--tls-dir D]` | write the CA certificate (never a key) to standard output or a file |

@@ -68,7 +68,7 @@ func init() {
 		{path: "user role", usage: "<name> admin|viewer [--auth-dir D]", about: "change a user's role and end that user's sessions (the last admin cannot be demoted)", action: "user.role", mutating: true, run: cmdUserRole},
 		{path: "user remove", usage: "<name> [--force] [--auth-dir D]", about: "remove a user and its sessions (not the last admin while other users remain; the last user only with --force while web.tlsListen is set)", action: "user.remove", mutating: true, run: cmdUserRemove},
 		{path: "user list", usage: "[--json] [--auth-dir D]", about: "names, role and creation time (never hashes)", action: "user.list", audit: true, run: cmdUserList},
-		{path: "user sessions", usage: "[--json]", about: "who is signed in and who is watching which camera, asked of the running web app on its loopback listener (live memory, not the session file; says so when the app is not running)", action: "user.sessions", audit: true, run: cmdUserSessions},
+		{path: "user sessions", usage: "[--json]", about: "who is signed in, who is watching which camera and how much video they receive, asked of the running web app on its loopback listener (live memory, not the session file; says so when the app is not running)", action: "user.sessions", audit: true, run: cmdUserSessions},
 		{path: "user unlock", usage: "<name> [--auth-dir D]", about: "lift a sign-in lockout in a running web app", action: "user.unlock", mutating: true, run: cmdUserUnlock},
 
 		{path: "tls ca", usage: "[--remote] [--json] [--tls-dir D]", about: "the local CA (--remote: the remote CA of web.remoteHost): file, SHA-256 fingerprint and the steps to install it on a device (created when absent)", action: "tls.ca", mutating: true, run: cmdTLSCA},

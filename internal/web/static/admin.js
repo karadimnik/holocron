@@ -36,7 +36,7 @@
       <thead><tr><th>User</th><th>Camera</th><th>Stream</th><th>Sessions</th><th>Since</th><th>Where</th></tr></thead>
       <tbody id="aOnWatch"></tbody>
     </table></div>
-    <p class="hint" id="aOnNote">Online means a page of that login polled in the last minute. Addresses are kept in memory only. Same list as <code>holocron user sessions</code>; refreshed every 15 s while this page is visible.</p>
+    <p class="hint" id="aOnNote">Online means a page of that login polled in the last minute. Addresses are kept in memory only. Same list as <code>holocron user sessions</code>, which also prints the bandwidth figures shown in the Dashboard's Who's online section; refreshed every 15 s while this page is visible.</p>
   </div>
 
   <div class="panel apanel" id="aUsersPanel">
@@ -675,39 +675,62 @@
     if (built) renderOnline(rep);
   }
 
-  // ---------------------------------------------------------------- the Online strip
-  // GET /api/admin/sessions is read-only and allowed on a view-only listener, so every admin gets the strip under the tabs; the
-  // full table is the Admin tab's. One request every ONLINE_MS while the page is visible feeds both.
+  // ---------------------------------------------------------------- the Dashboard's "Who's online" section
+  // GET /api/admin/sessions is admin-only on the server (a viewer is refused whatever the page does) and read-only, so it is also
+  // allowed on a view-only listener: every admin gets the section on the Dashboard; the full table is the Admin tab's. One request
+  // every ONLINE_MS while the page is visible feeds both.
   const ONLINE_MS = 15000;
   let onlineTimer = null;
   let onlineReport = null;
 
-  function onlineStripHTML(rep) {
-    const byUser = new Map();
+  function bits(bps) {
+    if (bps >= 1e6) return (bps / 1e6).toFixed(1) + " Mb/s";
+    if (bps >= 1e3) return Math.round(bps / 1e3) + " kb/s";
+    return Math.round(bps) + " b/s";
+  }
+  function bytesText(n) {
+    if (n >= 1e9) return (n / 1e9).toFixed(2) + " GB";
+    if (n >= 1e6) return (n / 1e6).toFixed(1) + " MB";
+    if (n >= 1e3) return Math.round(n / 1e3) + " kB";
+    return n + " B";
+  }
+
+  function bandwidthHTML(b) {
+    const tile = (lab, val, sub) => '<div class="tile"><div class="lab">' + esc(lab) + '</div><div class="val">' + esc(val) + '</div><div class="sub">' + esc(sub) + "</div></div>";
+    return tile("Receiving now", bits(b.currentBps), b.viewers + (b.viewers === 1 ? " page" : " pages") + " reporting") +
+      tile("Home network", bits(b.homeBps), bytesText(b.homeBytes) + " since start") +
+      tile("Internet", bits(b.internetBps), bytesText(b.internetBytes) + " since start") +
+      tile("Total since start", bytesText(b.totalBytes), "since " + new Date(b.since).toLocaleString());
+  }
+
+  function onlineRowsHTML(rep) {
+    const rows = [];
+    const cell = (label, text) => '<td data-label="' + label + '">' + esc(text) + "</td>";
     for (const s of rep.signedIn || []) {
-      const e = byUser.get(s.user) || { watching: [], online: 0, offline: 0 };
-      if (s.state === "watching") { e.watching.push(...s.cameras); e.online++; } else if (s.online) e.online++; else e.offline++;
-      byUser.set(s.user, e);
+      if (!s.online) continue;
+      const now = s.state === "watching" ? "Watching " + s.cameras.join(", ") : "Online";
+      rows.push("<tr><td>" + esc(s.user) + "</td>" + cell("Now", now) + cell("Where", where(s.network, s.peer)) + cell("Signed in", span(s.since, rep.now) + " ago") + "</tr>");
     }
-    const parts = [];
-    for (const [user, e] of byUser) {
-      if (!e.online) continue;
-      const what = e.watching.length ? "watching " + [...new Set(e.watching)].join(", ") : "online";
-      parts.push('<span class="who"><strong>' + esc(user) + "</strong> " + esc(what) + (e.online > 1 ? " x" + e.online : "") + "</span>");
+    for (const w of rep.watching || []) {
+      if (w.thisPC) rows.push("<tr><td>" + esc(w.user) + "</td>" + cell("Now", "Watching " + w.camera) + cell("Where", where(w.network, w.peer)) + cell("Signed in", "-") + "</tr>");
     }
-    for (const w of rep.watching || []) if (w.thisPC) parts.push('<span class="who"><strong>' + esc(w.user) + "</strong> watching " + esc(w.camera) + "</span>");
-    const away = [...byUser.values()].filter((e) => !e.online).length;
-    const tail = away ? ' <span class="sep">|</span> ' + away + " signed in, not online" : "";
-    return "<strong>Online now:</strong> " + (parts.length ? parts.join(' <span class="sep">|</span> ') : "nobody") + tail +
-      (el("adminTab").classList.contains("hide") ? "" : ' <span class="muted">(Admin tab has the details)</span>');
+    return rows.length ? rows.join("") : '<tr><td colspan="4">Nobody is online.</td></tr>';
+  }
+
+  function renderDashOnline(rep) {
+    const panel = el("onlinePanel");
+    panel.classList.toggle("hide", !rep);
+    if (!rep) return;
+    const away = (rep.signedIn || []).filter((s) => !s.online).length;
+    el("onCount").textContent = (rep.signedIn || []).filter((s) => s.online).length + (rep.watching || []).filter((w) => w.thisPC).length + " online, " + rep.watching.length + " watching" + (away ? ", " + away + " signed in, not online" : "");
+    el("onBw").innerHTML = bandwidthHTML(rep.bandwidth);
+    el("onRows").innerHTML = onlineRowsHTML(rep);
   }
 
   async function pollOnline() {
     if (document.hidden) return;
     try { onlineReport = await getJSON("api/admin/sessions"); } catch (err) { onlineReport = null; }
-    const strip = el("onlineStrip");
-    strip.classList.toggle("hide", !onlineReport);
-    if (onlineReport) strip.innerHTML = onlineStripHTML(onlineReport);
+    renderDashOnline(onlineReport);
     online(onlineReport);
   }
 

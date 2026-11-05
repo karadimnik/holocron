@@ -70,6 +70,8 @@ type SessionsReport struct {
 	LoginRequired bool          `json:"loginRequired"` // false: no HTTPS listener, so there are no logins to list
 	SignedIn      []SignedInRow `json:"signedIn"`
 	Watching      []WatchRow    `json:"watching"`
+	// Bandwidth is what the viewers receive, as their pages report it (bandwidth.go).
+	Bandwidth BandwidthReport `json:"bandwidth"`
 }
 
 func networkOf(remote, local bool) string {
@@ -93,6 +95,7 @@ func (a *API) handleAdminSessions(w http.ResponseWriter, r *http.Request) {
 	// Live-view sessions that are live now: the login polled lately, or (the loopback has no login) the
 	// page named the session lately. A stale entry (a crashed tab) is left out until its TTL removes it.
 	hub := a.hub()
+	out.Bandwidth = hub.bw.snapshot(hub.now(), hub.started)
 	live := hub.open()
 	hubNow := hub.now()
 	watching := live[:0]

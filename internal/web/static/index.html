@@ -45,8 +45,6 @@
   <!-- Shown to a signed-in viewer (detectAccess in app.js); the server refuses a viewer everything else anyway. -->
   <div id="viewerNote" class="viewonly-note hide"><strong>You are signed in as a viewer.</strong> You can watch the cameras and browse footage. Starting, stopping, recording and settings are for admins.</div>
   <div id="remoteNote" class="viewonly-note hide"><strong>Signed in from outside your home network: viewing only.</strong></div>
-  <!-- Admins only (pollOnline in app.js): who is online and watching, read-only, so it works on a view-only listener too. -->
-  <div id="onlineStrip" class="viewonly-note online-strip hide"></div>
 
   <!-- Shown instead of everything below once a stop this page asked for has taken the server away
        (renderStopped in app.js): under holocron up the web app stops with the rest. -->
@@ -103,6 +101,18 @@
     </div>
 
     <div id="camsC" class="clist"></div>
+
+    <!-- Admins only (pollOnline in admin.js; the server refuses a viewer the sessions route whatever this page does): who is
+         online or watching, and how much video the viewers receive (their pages report it with the status check-in). -->
+    <div class="panel hide" id="onlinePanel" style="margin-top:16px">
+      <header><h2>Who's online</h2><span class="muted" id="onCount"></span></header>
+      <div class="stats" id="onBw"></div>
+      <div class="ascroll"><table class="ausers">
+        <thead><tr><th>User</th><th>Now</th><th>Where</th><th>Signed in</th></tr></thead>
+        <tbody id="onRows"></tbody>
+      </table></div>
+      <p class="muted" style="margin:8px var(--pad)">Rates are what the open pages report: video that goes straight from the cameras' live view to each browser, never through Holocron. Totals count from the last start of the web app. Same figures as <code>holocron user sessions</code>.</p>
+    </div>
 
     <div class="panel" style="margin-top:16px">
       <header><h2>Recent events</h2><span class="muted" id="eventCount"></span></header>
@@ -273,6 +283,7 @@
     <div class="lwrap" id="lwrap">
       <div class="ltools">
         <span class="muted" id="lcount"></span>
+        <span class="lbw hide" id="lbw" title="Video this page is receiving right now" aria-label="Video this page is receiving right now"></span>
         <span class="muted lhint">Click a camera to enlarge it. Sound is off until you unmute. Pictures stop while this tab is hidden.</span>
         <span class="lmode" role="group" aria-label="Picture size" title="Fit shows the whole picture; Fill uses the whole area and crops the edges">
           <button type="button" class="btn small" id="lfit" aria-pressed="true">Fit</button><button type="button" class="btn small" id="lfill" aria-pressed="false">Fill</button>

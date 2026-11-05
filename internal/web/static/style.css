@@ -325,6 +325,7 @@ body.live-tab .top{margin-bottom:6px;gap:12px}
 .lwrap:fullscreen{padding:4px;overflow:auto}
 .ltools{display:flex;align-items:center;gap:6px 12px;flex-wrap:wrap;min-height:30px;padding:0 2px}
 .ltools .lhint{font-size:12px;margin-left:auto}
+.ltools .lbw{font-size:11px;color:var(--ink-3);border:1px solid var(--line-soft);border-radius:10px;padding:1px 8px;font-variant-numeric:tabular-nums;white-space:nowrap}
 .lwrap:fullscreen .ltools{position:absolute;top:8px;right:8px;z-index:3;min-height:0;opacity:.45}
 .lwrap:fullscreen .ltools:hover,.lwrap:fullscreen .ltools:focus-within{opacity:1}
 .lwrap:fullscreen .ltools>:not(#lfs):not(.lmode){display:none}
@@ -398,9 +399,7 @@ body.live-tab .top{margin-bottom:6px;gap:12px}
 /* ---- view-only (HTTPS LAN listener, tlsReadOnly) ---- */
 .viewonly-note{background:var(--surface-2);border:1px solid var(--line);border-radius:var(--r);padding:10px var(--pad);margin-bottom:14px;color:var(--ink-2);font-size:13px}
 .viewonly-note strong{color:var(--ink)}
-.online-strip{padding:6px var(--pad)}
-.online-strip .who{white-space:nowrap}
-.online-strip .sep{color:var(--ink-3)}
+#onlinePanel .stats{margin:0 var(--pad) 14px}
 body.viewonly #controls{display:none}
 body.viewonly .tgl{pointer-events:none;opacity:.5}
 body.viewonly [data-ack]{display:none}
