@@ -44,6 +44,8 @@ var roRoutes = []roRoute{
 	{"PUT", "/api/cameras", jsonHdr, `{"cameras":[]}`, false},
 	{"POST", "/api/cameras/Cam%201/record", jsonHdr, `{"record":false}`, false},
 	{"POST", "/api/acknowledge", jsonHdr, `{"key":"x","at":"y"}`, false},
+	// who is online: admin class, read-only, so the admin strip works on a view-only listener
+	{"GET", "/api/admin/sessions", nil, ``, true},
 	// the Admin tab: never on a view-only listener, not even to read
 	{"GET", "/api/admin/config", nil, ``, false},
 	{"POST", "/api/admin/config/set", jsonHdr, `{"key":"SegmentSeconds","value":"600"}`, false},

@@ -96,7 +96,7 @@ One table decides who may call what: `routeAccess` in `internal/web/access.go` g
 - **Changing a role or password ends that user's sessions** (an admin changing their own in the Admin tab stays signed in).
 - **The loopback listener has no roles**: `GET /api/auth/me` there answers `loginRequired: false, role: admin`.
 
-**View-only HTTPS (default).** `tlsReadOnly` defaults to true: even an admin on the HTTPS listener can only watch. It is an allow-list (`readOnlyAllowed`, `tlsserver.go`): a few GETs (status, live, cameras, config, footage, clip, `/api/tls/*`, `/api/auth/me`), the Live WHEP calls, and sign-in and sign-out. Everything else, including every `/api/admin/*` route, is refused with 403 `read-only: this address can only watch`. The page then shows "This address is view-only", makes Settings inert and hides the Admin tab. `-tls-readonly false` (or `CAMUI_TLS_READONLY=false`) gives a signed-in LAN admin full control; a viewer is still refused every change. There is no `holocron.config.json` key for it.
+**View-only HTTPS (default).** `tlsReadOnly` defaults to true: even an admin on the HTTPS listener can only watch. It is an allow-list (`readOnlyAllowed`, `tlsserver.go`): a few GETs (status, live, cameras, config, footage, clip, `/api/tls/*`, `/api/auth/me`, and `/api/admin/sessions`, which only an admin gets and which only reads: [Who is online](#who-is-online-and-who-is-watching)), the Live WHEP calls, and sign-in and sign-out. Everything else, including every other `/api/admin/*` route, is refused with 403 `read-only: this address can only watch`. The page then shows "This address is view-only", makes Settings inert and hides the Admin tab. `-tls-readonly false` (or `CAMUI_TLS_READONLY=false`) gives a signed-in LAN admin full control; a viewer is still refused every change. There is no `holocron.config.json` key for it.
 
 ## The tabs
 
@@ -172,14 +172,14 @@ The **Live** tab shows the cameras as a grid of tiles. It needs `LiveViewEnabled
 - The grid fills the window. **Fit** (default) never crops; **Fill** divides the whole area into cells and crops the picture to them. The choice is kept per browser in `localStorage` under `camui.live.fit`. **Fullscreen** puts the grid alone on the screen.
 - A click on a tile opens a modal for that camera: the tile's own picture at once, then the **main** stream (chip "HD loading...", then "HD"; "HD unavailable" with **Retry HD** if it cannot be had), **Unmute/Mute**, **Fullscreen**, **Copy diagnostics**, **Close**. At most one main session exists at a time. When the tile already plays the camera's only stream (no sub offered, or no main) there is no HD to fetch: the modal shows the tile's picture with its state chip, no HD chip and no **Retry HD** (no control that cannot work, see [Design principles](#design-principles)), opens no session of its own, and **Copy diagnostics** copies the tile's line.
 - Deep links: `#live`, `#live/<camera name>` (percent-encoded).
-- **Hidden means keep, then free.** Minimising the window or choosing another tab does not close the streams at once; they stay connected for `hiddenGraceSeconds` (default 300; 0 frees at once; -1 never; capped at 86400; see the settings table above for where to set it), then everything is closed and reopens when the page is shown again.
+- **Hidden means keep, then free.** Minimising the window or choosing another tab does not close the streams at once; they stay connected for `hiddenGraceSeconds` (default 300; 0 frees at once; -1 never; capped at 86400; see the settings table above for where to set it), then everything is closed and reopens when the page is shown again. This is read from `live.js` (`away()`, `enterAway`, `checkGrace`, `freeNow`), and it is the same for a hidden browser tab or minimised window (`visibilitychange`) and for another camui tab (the Live tab not selected): the grace clock starts, nothing closes before it runs out, and the session is closed with a `DELETE` when it does. Closing the tab or leaving the page (`pagehide`) closes every session at once. While away, the page keeps naming its open sessions to the web app every 30 s (`GET /api/live?open=`, also when another camui tab is showing), so a wall screen kept for hours with `hiddenGraceSeconds` -1 still shows as watching in [Who is online](#who-is-online-and-who-is-watching); once the grace has freed the streams there is nothing to name, and the user shows as online, not watching.
 - **Recovery without a reload**: a lost picture reconnects after 1, 2, 4, 8, 15, then 30 s; a connected picture whose frames stand still for 8 s is rebuilt; the page makes at most 20 automatic reconnects a minute; the camera list is re-read every 10 s (5 s while something is wrong, 30 s while hidden). Constants: `live.js` lines 81 to 100.
 
 **How it works.** The browser talks only to the web app. `POST /api/live/{camera}/whep?stream=sub|main` carries the browser's WebRTC offer (`Content-Type: application/sdp`, at most 64 KiB). The web app looks the camera's path up in `status.json`, forwards the offer to the live relay at `LiveWhepAddress` (a loopback `host:port`, default `127.0.0.1:8889`) with a Basic login (user `camlive`, the secret read at each use from the live secret file, 64 hex characters, `LiveSecretPath` or `live_view_secret.txt` in the auth folder) and returns the answer with `201` and `Location: /api/live/session/<id>`, an id the web app minted. The picture then flows from the relay to the browser directly over UDP (`LiveUdpAddress`, default `127.0.0.1:8189`). No browser header is forwarded, no proxy from the environment is used, redirects are not followed.
 
 | Route | Who | Behaviour |
 |---|---|---|
-| `GET /api/live` | viewer | `enabled`, `alive`, `hiddenGraceSeconds`, and per camera `name`, `sub`, `main`, `camAlive`, `restarts`, `lastError`. Names only; `cameras` is empty when live view is off. |
+| `GET /api/live[?open=id,id]` | viewer | `enabled`, `alive`, `hiddenGraceSeconds`, and per camera `name`, `sub`, `main`, `camAlive`, `restarts`, `lastError`. Names only; `cameras` is empty when live view is off. |
 | `POST /api/live/{camera}/whep?stream=sub\|main` | viewer | 201 with the answer SDP. Errors are JSON with generic text: 400 bad `stream` or empty offer, 404 unknown camera or stream not offered, 413 offer too large, 415 not `application/sdp`, 429 too many sessions, 502 "live view is misconfigured" (the relay refused the login, the secret file is missing or not 64 hex characters, or `LiveWhepAddress` is not loopback), 503 "live view is off" or "unavailable", 504 the relay did not answer in 15 s. |
 | `DELETE /api/live/session/{id}` | viewer | Closes that session. An id the web app did not mint, or older than an hour, is 404. |
 
@@ -232,6 +232,40 @@ Commands (all take `--auth-dir`, default `web.authDir`):
 | `holocron user remove <name> [--force]` | Removes the user and its sessions. |
 | `holocron user list [--json]` | Names, role, creation time; never hashes. |
 | `holocron user unlock <name>` | Lifts a sign-in lockout in a running web app. |
+| `holocron user sessions [--json]` | Who is signed in and who is watching which camera, asked of the running web app ([Who is online](#who-is-online-and-who-is-watching)). |
+
+### Who is online and who is watching
+
+An admin can see who is signed in and who is watching which camera, right now. It costs the Raspberry Pi nothing noticeable: no disk write, no timer, no goroutine and no extra poll. Every number is read from memory (`admin_sessions.go`, `presence.go`, `live.go`; the cost is reasoned from the code, not measured: [Cost](#cost-of-the-online-list)).
+
+**Where it comes from.**
+
+- The **live-view table** (`liveHub`, in memory, at most 24 entries) now remembers for each session the user, a short opaque **login id**, the stream (sub or main), the start time and the peer address. The login id is the first 8 characters of the SHA-256 of the session token (`loginIDOf`); the cookie itself is never kept or shown. A session opened on the loopback listener has no login and is shown as **this PC (no login)**, never as a user name. The loopback and the HTTPS listener share one table, so the 24-session and 6-per-camera caps are now counted over both together.
+- A **presence map** in the sign-in service notes, per login id, the time, peer address and LAN-or-remote of the last `GET /api/status` (every open page, every 5 s) or `GET /api/live` (the Live page, every 10 s) that passed the session gate. It is a map write under a mutex; it is not `Session.LastSeen`, which is still written to `sessions.json` at most every 10 minutes (`lastSeenGranularity`, unchanged). The map is lost when the web app restarts; every open page is back in it within 5 s. Peer addresses are kept in memory only (the sign-in peer already goes to `auth.log`).
+
+**States** (per login session, "active" = a page of that login polled in the last 60 s):
+
+| State | Means |
+|---|---|
+| Watching | Active, and at least one live-view session of that login is open. The cameras are listed. |
+| Online | Active, no live-view session (the dashboard or the footage browser is open). |
+| Not online | Not active in the last 60 s, or not since the web app started. The last activity shown is the session file's, so it is good to about 10 minutes (marked `~`). |
+
+A live-view session whose page went away without closing it (a crashed tab, a phone that lost power) is hidden from the list within a minute, because its login stops polling; it keeps its slot until the one-hour limit. A session on the loopback listener has no login to poll with, so it counts as watching while the page names it in its list poll, at most every 30 s.
+
+**Viewing for more than an hour.** A live-view entry still ends one hour after it was opened (`liveSessionTTL`, unchanged, so a lost entry cannot hold a slot longer). The Live page therefore names the sessions it still holds in the poll it already makes: `GET /api/live?open=<id>,<id>`. The web app pushes only those entries' expiry forward, and only entries opened by the same login. An id the page no longer knows is not named and expires at the hour.
+
+**The route.** `GET /api/admin/sessions` (admin class, read-only, also open on a view-only HTTPS listener; a viewer and every remote peer get 403, as for any admin route). It answers `signedIn` (login id, user, role, since, last activity, `precise`, online, state, cameras, peer, network `lan` or `remote`) and `watching` (one row per login and camera: user, camera, streams, count, earliest start, peer, network `lan`, `remote` or `local`), both in a stable order (user, then time or camera, then login id). It holds no cookie, no token hash and no password.
+
+**In the page.** Every admin, also on a view-only HTTPS listener, sees a small **Online now** strip under the tabs (who is online or watching, and how many are signed in but not online). The Admin tab, where it is shown, has the full table (user, role, state, where, signed in, last activity) and the watching table. A viewer and a remote peer get no strip.
+
+**On the command line.** `holocron user sessions [--json]` prints the same two lists. "Watching" lives in the running web app's memory, so the command asks the app on its loopback listener (`web.listen`, no login there), as `holocron doctor` and `holocron open` do; it opens no credential file and sends none. When the app is not running it says so ("web app: not answering at ...") and exits 1; with `--json` the answer is `{"running": false, "reason": ...}`. If the loopback listener demands a token (`CAMUI_TOKEN`) the command says that it cannot ask.
+
+**Not shown, on purpose.** Device names and the browser's user agent (nothing collects them), ending a session from the list, and history. `auth.log` and the `web.live.create` records remain the history.
+
+#### Cost of the online list
+
+Reasoned from the code, not measured on a Raspberry Pi 4: one map write per page poll (microseconds), five fields more per live-view entry, and for an admin who has the page open one request every 15 s (the strip and the Admin tab share it, and it pauses while the page is hidden) that walks a few dozen rows. No new disk write, timer, goroutine or poll, and nothing in the recording path (`internal/relay`, `internal/app` and `internal/host` do not import `internal/web`).
 
 ### The certificate authority
 
@@ -257,7 +291,7 @@ The first start with `web.tlsListen` set (or `holocron tls ca`) creates a local 
 
 (Steps as printed by `holocron tls ca`; not walked through on a device for this document.)
 
-**Rotate or revoke.** `holocron tls rotate --yes`, then `holocron restart --detach`; `holocron tls ca` shows the new fingerprint; remove the old CA from each device and install the new one. The Admin tab does the same after you type `ROTATE`; until the web app restarts the LAN listener keeps the old certificate. To cut one person off, change their password (`holocron user passwd`) or remove them (`holocron user remove`); there is no per-device list.
+**Rotate or revoke.** `holocron tls rotate --yes`, then `holocron restart --detach`; `holocron tls ca` shows the new fingerprint; remove the old CA from each device and install the new one. The Admin tab does the same after you type `ROTATE`; until the web app restarts the LAN listener keeps the old certificate. To cut one person off, change their password (`holocron user passwd`) or remove them (`holocron user remove`); there is no per-device list to end sessions from (who is signed in now is under [Who is online](#who-is-online-and-who-is-watching)).
 
 **Windows Firewall** (Holocron applies none; documented-only, `UNVERIFIED`; Windows filters by program and `holocron.exe` is the program that listens). From an elevated PowerShell, adjusting the path and port:
 
@@ -366,6 +400,7 @@ Admins only; its markup and code are in `admin.js`, which only an admin receives
 | Section | Does | Command it shares |
 |---|---|---|
 | Health (first) | A badge (HEALTHY, DEGRADED, STARTING, BROKEN, NOT RUNNING; STARTING has no colour of its own yet and is drawn like NOT RUNNING), the time of the run, **Refresh**, "auto refresh every 30 s" (off by default), and a block per group (setup, recording, connections, live, web, storage, system) that is open when it holds a warn or fail; each check with its level, detail and, for warn and fail, the fix command with a Copy button. | `holocron doctor` |
+| Who is online | Signed-in sessions (state, where, since, last activity) and who is watching which camera, from memory; the same list as the Online strip and `holocron user sessions`. | `holocron user sessions` |
 | Users | List (name, role, created, locked out), add, set a password, make admin or viewer, unlock, remove. | `holocron user add`, `passwd`, `role`, `remove`, `unlock` |
 | Camera login | Stores the camera user name and password in the secrets store; shows only "present" or "not set". A running system keeps the login its relay, live view and directly recorded cameras started with, so while Holocron runs the success note (a status live region) says "Restart needed" and names `holocron restart --detach` (this page has no restart control; Reload configuration does not re-read the login); with nothing running it says the login applies at the next start. Importing the old `camera_creds.xml` stays on the command line. | `holocron secret set`, `holocron secret import` |
 | Settings keys | Every key of the `config set` allow-list with value, default, rule and whether it needs a restart; edit (validated first) and back to the default. | `holocron config set`, `holocron config unset` |
@@ -396,7 +431,8 @@ Admins only; its markup and code are in `admin.js`, which only an admin receives
 | `GET`, `PUT /api/cameras` | admin | Read or replace the camera list |
 | `GET`, `PUT /api/config` | admin | Read or write the four Settings keys |
 | `GET /api/footage`, `/api/clip` | viewer | Footage index; one clip as fragmented MP4 |
-| `GET /api/live`, `POST /api/live/{camera}/whep`, `DELETE /api/live/session/{id}` | viewer | Live view |
+| `GET /api/live[?open=id,id]`, `POST /api/live/{camera}/whep`, `DELETE /api/live/session/{id}` | viewer | Live view; `open` names the sessions the page still holds so their one-hour limit is pushed forward |
+| `GET /api/admin/sessions` | admin, also on a view-only listener | Who is signed in and watching ([Who is online](#who-is-online-and-who-is-watching)) |
 | `GET /api/tls/ca.crt` (`?ca=remote`), `/api/tls/info` | viewer, HTTPS listener only, 404 to a remote peer | CA certificate (or the remote CA) and the fingerprints |
 | `GET /admin.js` | admin | The Admin tab's code |
 | `/api/admin/config` (GET), `/config/set`, `/config/unset` (POST) | admin | Settings keys |

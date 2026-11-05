@@ -94,11 +94,26 @@ type liveSession struct {
 	camera   string
 	upstream string
 	expires  time.Time
+	liveWho
+	started time.Time // when the session was opened
+	seen    time.Time // the open, or the last poll of the page that holds it
+}
+
+// liveWho is what the table remembers about the viewer, for the admin's "who is watching" list. It is
+// memory only and never written anywhere. user and loginID are empty for a session opened on the
+// loopback listener (no login): that is "this PC", never a username.
+type liveWho struct {
+	user    string
+	loginID string // the opaque short id of the login session (loginIDOf), never the cookie
+	stream  string // sub or main
+	peer    string
+	remote  bool
 }
 
 // liveHub holds the session table and the per-episode log flags.
 type liveHub struct {
 	client *http.Client
+	now    func() time.Time
 
 	mu           sync.Mutex
 	sessions     map[string]*liveSession
@@ -109,6 +124,7 @@ type liveHub struct {
 
 func newLiveHub() *liveHub {
 	return &liveHub{
+		now: time.Now,
 		client: &http.Client{
 			// No proxy from the environment, no redirects, no compression:
 			// the call is one plain loopback request.
@@ -124,7 +140,11 @@ func newLiveHub() *liveHub {
 }
 
 func (a *API) hub() *liveHub {
-	a.liveOnce.Do(func() { a.live = newLiveHub() })
+	a.liveOnce.Do(func() {
+		if a.live == nil { // the loopback and the LAN listener share one table (withLive)
+			a.live = newLiveHub()
+		}
+	})
 	return a.live
 }
 
@@ -292,7 +312,16 @@ type liveListJSON struct {
 	Cameras            []liveCameraJSON `json:"cameras"`
 }
 
+// liveOpenParam is the query parameter of GET /api/live in which the page names the live sessions it
+// still holds (comma-separated ids, at most liveMaxSessions): the server pushes only those entries'
+// expiry forward, so a viewer who stays longer than liveSessionTTL keeps showing as watching while an
+// entry the page lost (a crash, a closed phone) still expires at the TTL.
+const liveOpenParam = "open"
+
 func (a *API) handleLiveList(w http.ResponseWriter, r *http.Request) {
+	if raw := r.URL.Query().Get(liveOpenParam); raw != "" {
+		a.hub().keep(loginFrom(r), strings.Split(raw, ","))
+	}
 	state := a.liveSnapshot(a.liveSettings())
 	body := liveListJSON{Enabled: state.enabled, Alive: state.alive, HiddenGraceSeconds: a.cfg.LiveHiddenGraceEffective(), Cameras: []liveCameraJSON{}}
 	for _, camera := range state.cameras {
@@ -434,7 +463,7 @@ func (a *API) handleLiveWhep(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	id := hub.commit(camera.name, upstreamSessionURL(request.URL, response.Header.Get("Location"), path))
+	id := hub.commit(camera.name, upstreamSessionURL(request.URL, response.Header.Get("Location"), path), a.whoOpened(r, streams[0]))
 	committed = true
 	hub.clearLogged()
 
@@ -519,7 +548,7 @@ func (h *liveHub) countLocked(camera string) (total, perCamera int) {
 func (h *liveHub) reserve(camera string) bool {
 	h.mu.Lock()
 	defer h.mu.Unlock()
-	h.purgeLocked(time.Now())
+	h.purgeLocked(h.now())
 	total, perCamera := h.countLocked(camera)
 	if total >= liveMaxSessions || perCamera >= liveMaxSessionsPerCamera {
 		return false
@@ -542,8 +571,19 @@ func (h *liveHub) releaseLocked(camera string) {
 	}
 }
 
+// whoOpened is the viewer of a request that opens a session. A request on the loopback listener has
+// no login (the gate puts nothing in its context), so it carries no user and no login id.
+func (a *API) whoOpened(r *http.Request, stream string) liveWho {
+	who := liveWho{stream: stream, peer: sourceIP(r)}
+	if user, ok := userFrom(r); ok {
+		who.user, who.loginID = user.Username, loginFrom(r)
+		who.remote = a.auth != nil && a.auth.remote(r)
+	}
+	return who
+}
+
 // commit turns a reserved slot into a session and returns its minted id.
-func (h *liveHub) commit(camera, upstream string) string {
+func (h *liveHub) commit(camera, upstream string, who liveWho) string {
 	raw := make([]byte, 16)
 	if _, err := rand.Read(raw); err != nil {
 		panic("no randomness: " + err.Error())
@@ -552,8 +592,39 @@ func (h *liveHub) commit(camera, upstream string) string {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 	h.releaseLocked(camera)
-	h.sessions[id] = &liveSession{camera: camera, upstream: upstream, expires: time.Now().Add(liveSessionTTL)}
+	now := h.now()
+	h.sessions[id] = &liveSession{camera: camera, upstream: upstream, expires: now.Add(liveSessionTTL), liveWho: who, started: now, seen: now}
 	return id
+}
+
+// keep pushes the expiry of the named sessions forward, only those the login loginID opened ("" is
+// the loopback listener). An id that is unknown, expired or someone else's is ignored. The page names
+// what it still holds, so nothing else is kept alive.
+func (h *liveHub) keep(loginID string, ids []string) {
+	if len(ids) > liveMaxSessions {
+		ids = ids[:liveMaxSessions]
+	}
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	now := h.now()
+	h.purgeLocked(now)
+	for _, id := range ids {
+		if session := h.sessions[strings.TrimSpace(id)]; session != nil && session.loginID == loginID {
+			session.expires, session.seen = now.Add(liveSessionTTL), now
+		}
+	}
+}
+
+// open returns a copy of the sessions that have not expired.
+func (h *liveHub) open() []liveSession {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	h.purgeLocked(h.now())
+	out := make([]liveSession, 0, len(h.sessions))
+	for _, session := range h.sessions {
+		out = append(out, *session)
+	}
+	return out
 }
 
 // take removes and returns a session, or nil when the id is unknown or expired.
@@ -563,7 +634,7 @@ func (h *liveHub) take(id string) *liveSession {
 	}
 	h.mu.Lock()
 	defer h.mu.Unlock()
-	h.purgeLocked(time.Now())
+	h.purgeLocked(h.now())
 	session := h.sessions[id]
 	delete(h.sessions, id)
 	return session

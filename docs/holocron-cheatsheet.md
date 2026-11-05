@@ -37,6 +37,7 @@ One page of lookups. First time here: [holocron-quickstart.md](holocron-quicksta
 | add / change password / list users | `holocron user add anna`, `holocron user passwd anna`, `holocron user list` (password on standard input) |
 | make a view-only user / change a role | `holocron user add bob --role viewer`, `holocron user role bob admin` |
 | remove a user / lift a lockout | `holocron user remove bob`, `holocron user unlock bob` |
+| who is signed in / watching now | `holocron user sessions` (needs the web app running) |
 | show the CA to install on a phone / export it | `holocron tls ca` / `holocron tls print --out ca.crt` |
 | show the remote CA (web.remoteHost) to install on a phone, at home only | `holocron tls ca --remote` |
 | store the camera login (a running system needs `holocron restart --detach` to use a new one; the command says so) | `holocron secret set camera.user`, `holocron secret set camera.password` |

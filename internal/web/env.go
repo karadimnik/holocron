@@ -15,6 +15,7 @@ type serveEnv struct {
 	settings SettingsWriter
 	admin    AdminTools
 	auth     *authService
+	live     *liveHub // the live-view table both listeners share, so the admin sees every viewer
 	reqLevel slog.Level
 }
 
@@ -36,6 +37,7 @@ func withLaunch(l *HolocronLaunch) serveOpt  { return func(e *serveEnv) { e.laun
 func withSettings(w SettingsWriter) serveOpt { return func(e *serveEnv) { e.settings = w } }
 func withAdmin(t AdminTools) serveOpt        { return func(e *serveEnv) { e.admin = t } }
 func withAuth(a *authService) serveOpt       { return func(e *serveEnv) { e.auth = a } }
+func withLive(h *liveHub) serveOpt           { return func(e *serveEnv) { e.live = h } }
 func withRequestLevel(l slog.Level) serveOpt { return func(e *serveEnv) { e.reqLevel = l } }
 
 // apply configures an API.
@@ -44,4 +46,7 @@ func (e serveEnv) apply(a *API) {
 		a.runner = e.runner
 	}
 	a.ctlFixed, a.launch, a.settings, a.admin, a.auth = e.ctl, e.launch, e.settings, e.admin, e.auth
+	if e.live != nil {
+		a.live = e.live
+	}
 }

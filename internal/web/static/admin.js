@@ -25,6 +25,20 @@
     </div>
   </div>
 
+  <div class="panel apanel" id="aOnlinePanel">
+    <header><h2>Who is online</h2><span class="muted" id="aOnCount"></span></header>
+    <div class="ascroll"><table class="ausers">
+      <thead><tr><th>User</th><th>Role</th><th>Now</th><th>Where</th><th>Signed in</th><th>Last activity</th></tr></thead>
+      <tbody id="aOnSigned"></tbody>
+    </table></div>
+    <h3 class="ahead">Watching</h3>
+    <div class="ascroll"><table class="ausers">
+      <thead><tr><th>User</th><th>Camera</th><th>Stream</th><th>Sessions</th><th>Since</th><th>Where</th></tr></thead>
+      <tbody id="aOnWatch"></tbody>
+    </table></div>
+    <p class="hint" id="aOnNote">Online means a page of that login polled in the last minute. Addresses are kept in memory only. Same list as <code>holocron user sessions</code>; refreshed every 15 s while this page is visible.</p>
+  </div>
+
   <div class="panel apanel" id="aUsersPanel">
     <header><h2>Users</h2><span class="muted" id="aUsersCount"></span></header>
     <div class="ascroll"><table class="ausers">
@@ -624,6 +638,87 @@
     el("aAboutStarted").textContent = started ? new Date(String(started)).toLocaleString() : "not running";
   }
 
+  // ---------------------------------------------------------------- who is online
+  let onlineRep = null;
+
+  function span(iso, now) {
+    const s = Math.max(0, Math.round((new Date(now) - new Date(iso)) / 1000));
+    if (s < 90) return s + " s";
+    if (s < 5400) return Math.round(s / 60) + " min";
+    if (s < 172800) return Math.round(s / 3600) + " h";
+    return Math.round(s / 86400) + " d";
+  }
+  const where = (net, peer) => (net === "local" ? "this PC" : net === "remote" ? "remote " : net === "lan" ? "LAN " : "") + (net === "local" ? "" : peer || "-");
+
+  function renderOnline(rep) {
+    if (!rep) {
+      el("aOnCount").textContent = "";
+      el("aOnSigned").innerHTML = '<tr><td colspan="6">Could not read the list.</td></tr>';
+      el("aOnWatch").innerHTML = "";
+      return;
+    }
+    el("aOnCount").textContent = rep.loginRequired ? rep.signedIn.length + " signed in, " + rep.watching.length + " watching" : rep.watching.length + " watching";
+    const rows = rep.signedIn.map((s) => {
+      const now = s.state === "watching" ? "Watching " + s.cameras.join(", ") : s.online ? "Online" : "Not online";
+      const last = (s.precise ? "" : "~") + span(s.lastActivity, rep.now) + " ago";
+      return "<tr><td>" + esc(s.user) + '</td><td data-label="Role">' + esc(s.role) + '</td><td data-label="Now">' + esc(now) + '</td><td data-label="Where">' + esc(where(s.network, s.peer)) +
+        '</td><td data-label="Signed in">' + esc(span(s.since, rep.now)) + ' ago</td><td data-label="Last activity">' + esc(last) + "</td></tr>";
+    });
+    el("aOnSigned").innerHTML = rows.length ? rows.join("") : '<tr><td colspan="6">' + (rep.loginRequired ? "Nobody is signed in." : "No HTTPS login listener, so there are no logins.") + "</td></tr>";
+    const watch = rep.watching.map((w) => "<tr><td>" + esc(w.user) + '</td><td data-label="Camera">' + esc(w.camera) + '</td><td data-label="Stream">' + esc(w.streams) +
+      '</td><td data-label="Sessions">' + w.count + '</td><td data-label="Since">' + esc(span(w.since, rep.now)) + ' ago</td><td data-label="Where">' + esc(where(w.network, w.peer)) + "</td></tr>");
+    el("aOnWatch").innerHTML = watch.length ? watch.join("") : '<tr><td colspan="6">Nobody is watching.</td></tr>';
+  }
+
+  function online(rep) {
+    onlineRep = rep;
+    if (built) renderOnline(rep);
+  }
+
+  // ---------------------------------------------------------------- the Online strip
+  // GET /api/admin/sessions is read-only and allowed on a view-only listener, so every admin gets the strip under the tabs; the
+  // full table is the Admin tab's. One request every ONLINE_MS while the page is visible feeds both.
+  const ONLINE_MS = 15000;
+  let onlineTimer = null;
+  let onlineReport = null;
+
+  function onlineStripHTML(rep) {
+    const byUser = new Map();
+    for (const s of rep.signedIn || []) {
+      const e = byUser.get(s.user) || { watching: [], online: 0, offline: 0 };
+      if (s.state === "watching") { e.watching.push(...s.cameras); e.online++; } else if (s.online) e.online++; else e.offline++;
+      byUser.set(s.user, e);
+    }
+    const parts = [];
+    for (const [user, e] of byUser) {
+      if (!e.online) continue;
+      const what = e.watching.length ? "watching " + [...new Set(e.watching)].join(", ") : "online";
+      parts.push('<span class="who"><strong>' + esc(user) + "</strong> " + esc(what) + (e.online > 1 ? " x" + e.online : "") + "</span>");
+    }
+    for (const w of rep.watching || []) if (w.thisPC) parts.push('<span class="who"><strong>' + esc(w.user) + "</strong> watching " + esc(w.camera) + "</span>");
+    const away = [...byUser.values()].filter((e) => !e.online).length;
+    const tail = away ? ' <span class="sep">|</span> ' + away + " signed in, not online" : "";
+    return "<strong>Online now:</strong> " + (parts.length ? parts.join(' <span class="sep">|</span> ') : "nobody") + tail +
+      (el("adminTab").classList.contains("hide") ? "" : ' <span class="muted">(Admin tab has the details)</span>');
+  }
+
+  async function pollOnline() {
+    if (document.hidden) return;
+    try { onlineReport = await getJSON("api/admin/sessions"); } catch (err) { onlineReport = null; }
+    const strip = el("onlineStrip");
+    strip.classList.toggle("hide", !onlineReport);
+    if (onlineReport) strip.innerHTML = onlineStripHTML(onlineReport);
+    online(onlineReport);
+  }
+
+  function startOnline() {
+    if (onlineTimer) return;
+    pollOnline();
+    onlineTimer = setInterval(pollOnline, ONLINE_MS);
+    document.addEventListener("visibilitychange", () => { if (!document.hidden) pollOnline(); });
+  }
+
+
   // ---------------------------------------------------------------- wiring
   function build() {
     const section = document.querySelector('section[data-tab="admin"]');
@@ -671,6 +766,7 @@
   function show() {
     if (!built) build();
     status(last);
+    if (onlineRep) renderOnline(onlineRep);
     loadHealth();
     loadUsers();
     loadCamera();
@@ -681,5 +777,5 @@
     loadAutostart();
   }
 
-  window.Admin = { show, status };
+  window.Admin = { show, status, online, startOnline };
 })();

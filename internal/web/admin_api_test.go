@@ -489,7 +489,7 @@ func TestAdminBundleOnlyForAdmins(t *testing.T) {
 		t.Error("the page's admin section is not the empty, hidden placeholder")
 	}
 	app := a.do(tlsReq{path: "/app.js", cookie: viewer}).Body.String()
-	if !strings.Contains(app, `script.src = "admin.js"`) || !strings.Contains(app, "if (!viewer && !readOnly) await loadAdmin()") {
+	if !strings.Contains(app, `script.src = "admin.js"`) || !strings.Contains(app, "if (!viewer) await loadAdmin()") {
 		t.Error("app.js does not load admin.js for admins only")
 	}
 }
