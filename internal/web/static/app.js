@@ -1479,7 +1479,9 @@ async function detectAccess() {
   el("phoneTab").classList.toggle("hide", !onLan);
   accessKnown = true;
   renderStandalone();
-  if (!viewer && !readOnly) await loadAdmin();
+  // admin.js also carries the read-only Online strip, so every admin loads it; the Admin tab itself needs a listener that is not view-only.
+  if (!viewer) await loadAdmin();
+  if (!viewer && window.Admin) window.Admin.startOnline();
   if (roleTab(location.hash.slice(1))) showTab(location.hash.slice(1));
 }
 

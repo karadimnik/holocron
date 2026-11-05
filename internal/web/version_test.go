@@ -136,7 +136,7 @@ func TestVersionMarkupAndStalePageRules(t *testing.T) {
 			t.Errorf("app.js lost the rule %s", rule)
 		}
 	}
-	for _, rule := range []string{`<h3>About this Holocron</h3>`, `id="aAboutVersion"`, `id="aAboutPlatform"`, `id="aAboutGo"`, `id="aAboutStarted"`, `window.Admin = { show, status };`} {
+	for _, rule := range []string{`<h3>About this Holocron</h3>`, `id="aAboutVersion"`, `id="aAboutPlatform"`, `id="aAboutGo"`, `id="aAboutStarted"`, `window.Admin = { show, status, online, startOnline };`} {
 		if !strings.Contains(admin, rule) {
 			t.Errorf("admin.js lacks %s", rule)
 		}

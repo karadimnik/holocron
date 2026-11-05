@@ -22,7 +22,7 @@ A version is `MAJOR.MINOR.PATCH`, tagged `vMAJOR.MINOR.PATCH`. The public interf
 
 ### Added
 
-- `holocron user sessions [--json]` and `GET /api/admin/sessions`: an admin sees who is signed in and who is watching which camera (user, role, stream, since, peer address, LAN or remote; "this PC (no login)" for the loopback listener). Memory only, no new disk write, timer or poll; the route is admin-only, read-only and also open on the default view-only HTTPS listener. The Live page names its open sessions in its existing `GET /api/live` poll (`?open=`), so a viewer who stays longer than an hour keeps showing as watching while a lost session still expires at the hour. The loopback and HTTPS listeners now share one live-view table, so its 24-session cap counts both ([docs/ui.md](docs/ui.md#who-is-online-and-who-is-watching)).
+- `holocron user sessions [--json]` and `GET /api/admin/sessions`: an admin sees who is signed in and who is watching which camera (user, role, stream, since, peer address, LAN or remote; "this PC (no login)" for the loopback listener). Memory only, no new disk write, timer or poll; the route is admin-only, read-only and also open on the default view-only HTTPS listener. The Live page names its open sessions in its existing `GET /api/live` poll (`?open=`), so a viewer who stays longer than an hour keeps showing as watching while a lost session still expires at the hour. Admins also get an "Online now" strip under the tabs (also on the view-only listener) and a "Who is online" table in the Admin tab. The loopback and HTTPS listeners now share one live-view table, so its 24-session cap counts both ([docs/ui.md](docs/ui.md#who-is-online-and-who-is-watching)).
 
 ### Changed
 

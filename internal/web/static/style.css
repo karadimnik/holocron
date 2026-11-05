@@ -398,6 +398,9 @@ body.live-tab .top{margin-bottom:6px;gap:12px}
 /* ---- view-only (HTTPS LAN listener, tlsReadOnly) ---- */
 .viewonly-note{background:var(--surface-2);border:1px solid var(--line);border-radius:var(--r);padding:10px var(--pad);margin-bottom:14px;color:var(--ink-2);font-size:13px}
 .viewonly-note strong{color:var(--ink)}
+.online-strip{padding:6px var(--pad)}
+.online-strip .who{white-space:nowrap}
+.online-strip .sep{color:var(--ink-3)}
 body.viewonly #controls{display:none}
 body.viewonly .tgl{pointer-events:none;opacity:.5}
 body.viewonly [data-ack]{display:none}
