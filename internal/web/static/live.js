@@ -301,7 +301,7 @@ const Live = (() => {
   async function refresh() {
     clearTimeout(view.timer);
     try {
-      view.info = await getJSON("api/live");
+      view.info = await getJSON("api/live" + openQuery());
       view.error = null;
     } catch (err) {
       view.error = err.message || String(err);
@@ -310,10 +310,33 @@ const Live = (() => {
     scheduleRefresh();
   }
 
+  // The ids of the live sessions this page still holds (tiles and the modal). camui pushes only those entries' one-hour
+  // limit forward, so a wall screen that stays on for hours keeps showing as watching in the admin's list, while a session
+  // this page lost (a crash) is not named and still expires at the hour. A session address is "api/live/session/<id>".
+  function openSessionIds() {
+    const ids = [];
+    const add = (conn) => { if (conn && conn.session) ids.push(conn.session.slice(conn.session.lastIndexOf("/") + 1)); };
+    for (const tile of view.tiles.values()) add(tile);
+    if (view.modal) add(view.modal.conn);
+    return ids;
+  }
+
+  const openQuery = () => { const ids = openSessionIds(); return ids.length ? "?open=" + ids.join(",") : ""; };
+
   function scheduleRefresh() {
     clearTimeout(view.timer);
     view.timer = null;
-    if (!view.shown) return;
+    if (!view.shown) {
+      // Another camui tab is showing: the list is not read (nothing to draw), but streams kept for the grace period
+      // are still named, so they stay known to camui for as long as they play.
+      if (openSessionIds().length) {
+        view.timer = setTimeout(async () => {
+          try { await getJSON("api/live" + openQuery()); } catch (err) { /* the next one tries again */ }
+          scheduleRefresh();
+        }, REFRESH_AWAY_MS);
+      }
+      return;
+    }
     let wait = view.hidden ? REFRESH_AWAY_MS : view.error || !view.info || !view.info.alive ? REFRESH_FAST_MS : REFRESH_MS;
     if (view.holdUntil > Date.now()) wait = Math.min(wait, view.holdUntil - Date.now() + 200);
     view.timer = setTimeout(refresh, wait);

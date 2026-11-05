@@ -87,6 +87,7 @@ var routeAccess = map[string]access{
 	"POST /api/admin/autostart":      accessAdmin,
 	"GET /api/admin/health":          accessAdmin,
 	"POST /api/admin/reload":         accessAdmin,
+	"GET /api/admin/sessions":        accessAdmin, // who is signed in and watching; also read-only allowed (tlsserver.go)
 
 	// loopback only (the first-run page): never registered on the LAN listener
 	"GET /setup":           accessAdmin,

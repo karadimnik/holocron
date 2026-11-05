@@ -62,6 +62,7 @@ var adminWantAccess = map[string]access{
 	"POST /api/admin/autostart":      accessAdmin,
 	"GET /api/admin/health":          accessAdmin,
 	"POST /api/admin/reload":         accessAdmin,
+	"GET /api/admin/sessions":        accessAdmin,
 }
 
 func init() {

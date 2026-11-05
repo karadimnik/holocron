@@ -50,6 +50,8 @@ type authService struct {
 
 	remoteHost string // web.remoteHost; "" = remote access off (remote.go)
 
+	presence presenceMap // who polled lately: memory only (presence.go)
+
 	hashSlots chan struct{}
 	dummyOnce sync.Once
 	dummy     string
@@ -131,10 +133,10 @@ type ctxKey struct{}
 
 // signedIn is the user behind a valid session cookie.
 // A remote request's session is held to the remote limits.
-func (a *authService) signedIn(r *http.Request, remote bool) (User, bool) {
+func (a *authService) signedIn(r *http.Request, remote bool) (User, string, bool) {
 	c, err := r.Cookie(sessionCookie)
 	if err != nil {
-		return User{}, false
+		return User{}, "", false
 	}
 	lim := lanSession
 	if remote {
@@ -142,13 +144,13 @@ func (a *authService) signedIn(r *http.Request, remote bool) (User, bool) {
 	}
 	sess, ok := a.sessions.lookupWithin(c.Value, lim)
 	if !ok {
-		return User{}, false
+		return User{}, "", false
 	}
 	user, found, err := a.users.GetByID(sess.UserID)
 	if err != nil || !found {
-		return User{}, false
+		return User{}, "", false
 	}
-	return user, true
+	return user, loginIDOf(sess.TokenHash), true
 }
 
 // gate is the outermost check: a request with no valid session reaches nothing
@@ -167,12 +169,12 @@ func (a *authService) gate(mux *http.ServeMux, next http.Handler) http.Handler {
 		if remote {
 			remoteHeaders(w, r)
 		}
-		user, ok := a.signedIn(r, remote)
+		user, loginID, ok := a.signedIn(r, remote)
 		if ok && remote {
 			user.Role = roleViewer // the remote cap: a viewer whatever the account's role
 		}
 		if ok {
-			r = r.WithContext(context.WithValue(r.Context(), ctxKey{}, user))
+			r = r.WithContext(context.WithValue(context.WithValue(r.Context(), ctxKey{}, user), loginKey{}, loginID))
 		}
 		class, pattern := accessOf(mux, r)
 		if class == accessPublic {
@@ -207,6 +209,9 @@ func (a *authService) gate(mux *http.ServeMux, next http.Handler) http.Handler {
 			denied(a.log, r, user, pattern, "remote access is view-only")
 			writeAPIError(w, http.StatusForbidden, readOnlyMessage)
 			return
+		}
+		if pollRoutes[pattern] {
+			a.presence.touch(loginID, user.Username, sourceIP(r), remote, a.now())
 		}
 		next.ServeHTTP(w, r)
 	})

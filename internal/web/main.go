@@ -233,7 +233,7 @@ func Run(ctx context.Context, o Options) error {
 	}
 	cfg := o.Config
 	var log *slog.Logger
-	opts := []serveOpt{withController(o.Controller), withLaunch(o.Launch), withSettings(o.Settings), withAdmin(o.Admin)}
+	opts := []serveOpt{withController(o.Controller), withLaunch(o.Launch), withSettings(o.Settings), withAdmin(o.Admin), withLive(newLiveHub())}
 	if o.Logs != nil {
 		log = o.Logs.For("web")
 		opts = append(opts, withLogs(o.Logs), withRequestLevel(slog.LevelDebug))

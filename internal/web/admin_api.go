@@ -47,6 +47,7 @@ const (
 	ActionAdminAutostartSet = "web.admin.autostart.set"
 	ActionAdminHealth       = "web.admin.health"
 	ActionAdminReload       = "web.admin.reload"
+	ActionAdminSessions     = "web.admin.sessions"
 )
 
 // adminActions: name, mutating, audited read.
@@ -63,7 +64,8 @@ var adminActions = []struct {
 	{ActionAdminLogLevels, false, false}, {ActionAdminLogLevel, true, true},
 	{ActionAdminAutostart, false, true}, {ActionAdminAutostartSet, true, true},
 	{ActionAdminReload, true, true},
-	{ActionAdminHealth, false, false}, // read-only and polled: its records stay at DEBUG, out of the audit stream
+	{ActionAdminSessions, false, false}, // read-only and polled by the admin strip: DEBUG records
+	{ActionAdminHealth, false, false},   // read-only and polled: its records stay at DEBUG, out of the audit stream
 }
 
 func init() {
@@ -160,6 +162,7 @@ func (a *API) adminRoutes(mux *http.ServeMux) {
 	handleAction(mux, a.runner, "POST /api/admin/autostart", ActionAdminAutostartSet, a.handleAdminAutostartSet)
 	handleAction(mux, a.runner, "GET /api/admin/health", ActionAdminHealth, a.handleAdminHealth)
 	handleAction(mux, a.runner, "POST /api/admin/reload", ActionAdminReload, a.handleAdminReload)
+	handleAction(mux, a.runner, "GET /api/admin/sessions", ActionAdminSessions, a.handleAdminSessions)
 }
 
 // adminFailed answers an error of a helper with its status and its own words.

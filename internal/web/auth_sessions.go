@@ -202,6 +202,28 @@ func (s *sessionStore) DeleteUserExcept(userID, keepToken string) error {
 	return s.saveLocked()
 }
 
+// List returns the sessions the store holds and has not expired, oldest first. It reads the file
+// only when it changed and writes nothing: expired ones are left for the next lookup to remove.
+func (s *sessionStore) List() []Session {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.loadLocked()
+	now := s.now()
+	list := make([]Session, 0, len(s.sessions))
+	for _, sess := range s.sessions {
+		if !s.expired(sess, now, lanSession) {
+			list = append(list, sess)
+		}
+	}
+	sort.Slice(list, func(i, j int) bool {
+		if !list[i].CreatedAt.Equal(list[j].CreatedAt) {
+			return list[i].CreatedAt.Before(list[j].CreatedAt)
+		}
+		return list[i].TokenHash < list[j].TokenHash
+	})
+	return list
+}
+
 func (s *sessionStore) countFor(userID string) int {
 	s.mu.Lock()
 	defer s.mu.Unlock()

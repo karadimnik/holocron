@@ -274,6 +274,9 @@ var (
 		"/api/status": true, "/api/live": true, "/api/cameras": true, "/api/config": true,
 		"/api/footage": true, "/api/clip": true, "/api/tls/ca.crt": true, "/api/tls/info": true,
 		"/api/auth/me": true,
+		// Admin class (access.go), so only an admin gets it: the strip that says who is online.
+		// It reads memory and changes nothing.
+		"/api/admin/sessions": true,
 	}
 	readOnlyWhep    = regexp.MustCompile(`^/api/live/[^/]+/whep$`)
 	readOnlySession = regexp.MustCompile(`^/api/live/session/[^/]+$`)
