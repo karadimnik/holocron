@@ -5,6 +5,21 @@ name: ci
 on:
   push:
     branches: [main]
+    # Files nothing in the build, the tests, the doc checks or the release reads. A push whose changed files are
+    # ALL listed here starts no run; one other file in the push (any commit of it) starts the full run.
+    # Why each entry is safe, and why Markdown, LICENSE, .gitattributes and .github/rulesets are not listed: docs/ci.md
+    paths-ignore:
+      - ".gitignore"
+      - "**/.gitignore"
+      - ".DS_Store"
+      - "**/.DS_Store"
+      - ".github/dependabot.yml"
+      - "tests/stress/**/*.ps1"
+      - "tests/stress/**/*.py"
+      - "tests/stress/**/*.html"
+      - "tests/stress/**/*.json"
+      - "tests/stress/**/*.gz"
+      - "tests/stress/**/*.png"
   workflow_dispatch:
 
 permissions:
