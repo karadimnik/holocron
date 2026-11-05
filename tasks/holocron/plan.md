@@ -1,9 +1,10 @@
 # A portable NVR, grown beside the current one
 
-Status: UPDATED 2026-10-17. Stages 0, 1 and 2 are built, merged into `portable-nvr` and pushed (head `f90b987`); the LAN listener's
-token has been replaced by a login page with brute-force protection on the branch `portable-nvr-login` (built and proven, NOT merged
-and not pushed); Stages 3, 4 and 5 are not started. The single place to read where things stand is the **Status board** below, and the checklist is
-`todo.md` beside this file. Origin: the Operator's direction in `tasks/ipcctv-recording/todo.md` (in the original repository `windows-terminal-IPCCTV-dashboard`, branch `master`) [87].
+Status: RECONCILED 2026-11-05. This plan was written on the branch `portable-nvr` and its sections below are the design record as
+of 2026-10-17; the **Status board** and the paragraphs under it are current. Stages 0, 1, 2, 4 and 5 are built and merged, Holocron
+replaced the PowerShell system on 22 Oct 2026, lives in its own repository (branch `main`) and is released (v1.0.1 to v1.5.0, see the
+Releases table in `ledger.md`); Stage 3 is partly shipped as opt-in remote access. The checklist is `todo.md` beside this file. Origin:
+the Operator's direction in `tasks/ipcctv-recording/todo.md` (in the original repository `windows-terminal-IPCCTV-dashboard`, branch `master`) [87].
 
 ## WHERE THIS LIVES - the Operator's rule (2026-10-15)
 
@@ -17,46 +18,54 @@ and the original `ui/` on master stays untouched.
 **Order agreed with the Operator:** the soak, then Stage 1b (the mpv password fix, done in the ORIGINAL repository on
 master) are finished before Stage 0 of this project starts.
 
-## Status board (2026-10-17) - the single source of truth
+## Status board (2026-11-05) - the single source of truth
 
-Legend: DONE = built, checked, merged into `portable-nvr` and pushed. ADHOC = added during the work, not in the first
-plan, approved by the Operator as it went. OPEN = not started or not proven.
+Legend: DONE = built, checked, merged into `main` (or the former `portable-nvr`); the id is the merge in `ledger.md`. ADHOC = added
+during the work, approved by the Operator as it went. OPEN = not started or not proven. PARTIAL = part shipped, the rest named.
+Evidence for the later rows is the ledger and `CHANGELOG.md`; "Operator-reported" means stated by the Operator on 2026-11-05 and not
+proven by CI or a test in this repository.
 
 | Item | State | Evidence |
 |---|---|---|
 | Stage 0 spikes (WebRTC in Chrome, Edge; hardware decode; audio; MediaMTX exposure finding) | DONE | [tests/stress/live-view](../../tests/stress/live-view/README.md) |
 | Stage 1b mpv password off the command line (original repo, `master`) | DONE | pushed to `master` earlier |
-| Stage 1A dedicated login-protected live-view MediaMTX | DONE | merged `15e4bb3`; `livecfg`, `livesecret`, `livewhep`, `liveondemand` |
-| Stage 1B Live tab + same-origin WHEP proxy + scoped guard exception | DONE | merged `b8749e3`; Go tests, `uileak`, `livepage` |
-| Stage 2a LAN media address, tile diagnostics | DONE | merged `87871d0`; `livelan`; Firefox confirmed on the real system 2026-10-16 |
-| Stage 2b HTTPS listener, local CA with name constraints, token, limiter | DONE | merged `97fd3fe`; `livetls`; real phone confirmed by the Operator 2026-10-17 |
+| Stage 1A dedicated login-protected live-view MediaMTX | DONE | merged `15e4bb3` |
+| Stage 1B Live tab + same-origin WHEP proxy + scoped guard exception | DONE | merged `b8749e3` |
+| Stage 2a LAN media address, tile diagnostics | DONE | merged `87871d0`; Firefox confirmed on the real system 2026-10-16 and on a Mac with a LAN media address (`301d029`) |
+| Stage 2b HTTPS listener, local CA with name constraints, limiter | DONE | merged `97fd3fe`; real phone confirmed by the Operator 2026-10-17 |
 | Stage 2b.1 HTTPS listener view-only by default | DONE | merged `1e05dd8` |
-| Stage 2b.2 LAN login instead of the token: users, sessions, brute-force protection | BUILT, not merged | branch `portable-nvr-login`; Go tests, `livetls`/`uiguard`/`uileak` in Chrome and Edge; the Operator's real LAN install still runs the token build until he switches (docs/ui.md, "Signing in on the LAN") |
-| Stage 2c demo `-Lan` / `-Tls` for a phone test with fake cameras | ADHOC, DONE | merged `e15dbb4` |
-| Live grid fills the window, camera modal, fullscreen | ADHOC, DONE | merged `3fa1979`; `livepage` |
-| Live robustness: hidden-window grace, stall detection, recovery, diagnostics v3 | ADHOC, DONE | merged `629bb5e`; `liverobust` |
-| Fit / Fill toggle | ADHOC, DONE | merged `436b363` |
-| Alert 110 false-alarm floor (original repo, todo [92]) | ADHOC, DONE on `master` + merged into `portable-nvr` | pushed `b69d06d`, `f90b987`; live in the running NVR only after its next restart |
-| Login page replaces the LAN token (Operator, 2026-10-17) | DONE (merged; real-install steps in `docs/ui.md`, "Signing in on the LAN") | PBKDF2 passwords, per-IP and per-username throttling, loopback setup page, route matrix, `livetls` in Chrome and Edge |
-| OS-independent track: behaviour inventories, high-level design, low-level plan | DONE as documents (not built) | `spec/inventory-recorder.md`, `spec/inventory-supervisor.md`, `os-independent-hld.md`, `os-independent-lld.md` |
-| Stray-process guard S1 to S6 | PLANNED (specification for Stage 5, not built in PowerShell) | section below |
-| Stage 3 internet via a private overlay | OPEN, gated by a security review | - |
-| Stage 4 portable Go recorder, shadow mode | OPEN | - |
-| Stage 5 portable supervisor and control plane | OPEN | - |
-| Gap list for "fully OS independent" and "fully over the LAN" | WRITTEN, see the section "What is missing" below | `todo.md` |
+| Stage 2b.2 LAN login instead of the token: users, sessions, brute-force protection | DONE | merged `59237bd` |
+| Stage 2c demo `-Tls` for a phone test | ADHOC, DONE | merged `e15dbb4` |
+| Live grid, modal, fullscreen; robustness; Fit / Fill | ADHOC, DONE | merged `3fa1979`, `629bb5e`, `436b363` |
+| Alert 110 false-alarm floor (PowerShell system) | ADHOC, DONE | replaced with the PowerShell system on 22 Oct 2026 |
+| OS-independent track: inventories, high-level design, low-level plan | DONE | `spec/`, `os-independent-hld.md`, `os-independent-lld.md` (`a88b08a`) |
+| Stage 4 Go recorder (status contract, ffmpeg, pruner, relay, secrets) and shadow run | DONE | W0 `29dd4ef` to W13b `ebe5fe5`; [shadow-runbook.md](shadow-runbook.md); `docs/shadow.md` |
+| Stage 5 Go supervisor, host, process lifetime, alerts, control API, single command tree | DONE | W7a to W9c `d1dee7e` to `fec055e`, W8 `f237a52`, W10 `06d45fb` |
+| Web app inside the `holocron` program; viewer role and Admin tab; Phone tab; doctor | DONE | W9b1 `18749a2`, W9d `22943e7`, W16 `eeae710`, W19 `81edcbc`, W20 `54bace1` |
+| Install and autostart (logon task, systemd, launchd, Windows service) | DONE, per-OS evidence below | W12 `3aff33c`, `0ad7f7f`; cutover of 22 Oct 2026 ([cutover-plan.md](cutover-plan.md)) |
+| Own repository, CI matrix, release builds | DONE | R1 `7e2b7e7`, W14 `55d0dbb`, R7 `5002a66`; releases v1.0.1 to v1.5.0 |
+| Archive layout D20 (spool and day folders), PowerShell system removed from the repository | DONE | `86622c0` to `fc411f1`, B3a `7878a89`, B3b-1 `589a72a`; PowerShell system lives in `windows-terminal-IPCCTV-dashboard` |
+| `holocron cam discover` | DONE | R26 `cfaa6ab`, R27 `02d9440`, v1.5.0; real-network run verified by the Operator (operator-reported, 2026-11-05) |
+| Stage 3 internet | PARTIAL | opt-in remote access and live video from outside (R13 to R15, v1.3.0), Android tested; the security review gate and the overlay are not evidenced; D25 open |
+| Stray-process guard S1 to S6 | PARTIAL | S1 done (instance lock, W8); S2 and S3 partly (`down` by identity, doctor `system` group); S4, S5 open; see `todo.md` |
+| Gap list L1 to L12 (fully over the LAN) | MOSTLY CLOSED | L1, L6, L7, L8 closed; L4 partial; L2, L3, L5, L9 open; see `todo.md` |
 
-**Not yet proven in the stages marked DONE:** a clean run of the FULL harness since Stage 1A (checks were run individually);
-the Footage tab on a phone over the LAN; two viewers at once on the same camera; recovery after a real PC sleep (about 12 s
-in the closest simulation, not improved by the wake-up code); the CPU figure with six real cameras; whether High-profile H.264
-is what the real sub-streams use (they play in Chrome and Firefox; the profile was not recorded). The 24-hour tab soak in
-Stage 1's acceptance is PROPOSED FOR DROPPING under the Operator's no-stress-tests rule (his confirmation is pending); the open/close
-cycle check and his daily use would replace it.
+**Closed by the Operator (2026-11-05, operator-reported).** Real-network `cam discover`; the macOS verification pass; the real-hardware
+checks: the Footage tab on a phone over the LAN, two viewers against the cameras' 2-session limit, the real-camera CPU numbers, and the
+gap while the relay restarts (v1.4.3 documented it as not measured). The real sub-streams' H.264 profile is in the Spike C table below.
 
-**State of the real system.** The recorder runs from the portable folder, started by hand
-(`cam.ps1 -Stop`, then `cam.recorder.ps1 -Nvr` there), with live view on and a LAN media address. The three logon
-tasks still point at the ORIGINAL repository, so a reboot starts the original system, without live view. The portable
-`camui` for the phone runs from a hand-started copy under `%LOCALAPPDATA%\IPCCTV\camui`. This is the gap between
-"works" and "installed"; see GAP-L1 below.
+**Platforms.** Windows is the Operator's live system since 22 Oct 2026. The Operator also reports Holocron installed and running
+flawlessly on a Raspberry Pi 4 with 2 GB of RAM (Linux/ARM). That is operator-reported evidence: CI builds `linux/arm64` but runs its
+tests on amd64, and nothing in this repository ran on that board.
+
+**Still not proven.** iPhone and iPad (never run, `docs/limitations.md` 13); the real Windows service and the launchd agent as
+separate installs; a real PC sleep and resume with the Live wall open (the 12 s figure is from the PowerShell era); the continuous
+stray-process census and the live-session ledger (S2, S4); the security review of Stage 3. The 24-hour tab soak and the full
+PowerShell harness no longer apply (the harness was removed, the Go suite runs in CI).
+
+**State of the real system.** Holocron runs installed on the Operator's machine since the cutover of 22 Oct 2026 (the logon task
+runs `holocron`), recording to the archive with live view; the PowerShell system stays on disk, its tasks disabled, as the rollback
+target ([rollback.md](../../docs/rollback.md)). The text of GAP-L1 below describes the situation before that cutover.
 
 ## The brief, in the Operator's words
 
@@ -400,6 +409,8 @@ Method: every claim below was checked in the code or in a run on 2026-10-17, or 
 
 ### A. Fully OS independent
 
+*Written 2026-10-17. OS1 to OS12 are all built or settled since (see the Status board and `todo.md` P40 to P48); the table is kept as the design record.*
+
 What is already portable (verified): `camui` is one Go binary and its Go tests pass on Linux (run in WSL today); the
 recorder's data files (`status.json`, `cameras.json`, `recorder.config.json`) are JSON; MediaMTX and ffmpeg run on all three
 OSes; the live tiles use only a browser; the pruner rules and the UTC-seam design are written down and tested, so they can be
@@ -426,6 +437,8 @@ Honest note on the schedule: the clock change on 25 Oct 2026 is 8 days away and 
 (D5) cannot span it. The next change is 28 Mar 2027. The existing PowerShell recorder's DST behaviour is tested (`dst`, `dstloop`).
 
 ### B. Fully over the LAN
+
+*Written 2026-10-17, before the cutover; the current state of each row is in `todo.md` (L1, L6, L7, L8 closed; L4 partial; L2, L3, L5, L9 open).*
 
 Done and proven on the real system: HTTPS with a local CA, a mandatory token (replaced by a login on `portable-nvr-login`, see Stage 2b.2), a failure limiter, view-only by default,
 Live over the LAN in Chrome and Firefox on this PC and in a phone browser, a stable grid and a modal, recovery without reload.
@@ -472,9 +485,9 @@ portability before remote access; the order above follows what he asked for.
 | D7 | Autostart in attached or service mode (Stage 5). **ACCEPTED 2026-10-17** (logon task default, optional service; all done by `holocron install`) | Support both; the Operator picks the default at install. Attached keeps today's behaviour (a visible window you close to stop); service is headless and UI-controlled. |
 | D8 | May a LAN device with the token see camera addresses (`/api/cameras`)? | Hide the address fields in view-only mode. Unanswered. |
 | D9 | Control (start, stop, settings) from the LAN | Stay view-only until a separate control credential exists (L5). Unanswered. |
-| D10 | When does the portable build become the installed system (L1)? | After the full harness runs clean once; the original stays installable. Unanswered. |
-| D11 | CI and the new repository's host and name | With D1/D2 at the end. Unanswered. |
-| D12 | Portable camera-secret store (OS3) | Keyring where present, else an owner-only encrypted file; relay-only reads (OS4). Unanswered. |
+| D10 | When does the portable build become the installed system (L1)? | **DONE 22 Oct 2026** (cutover); the original stays installable ([rollback.md](../../docs/rollback.md)). |
+| D11 | CI and the new repository's host and name | **DONE** (R1 `7e2b7e7`, W14 `55d0dbb`): own repository Holocron, GitHub Actions. |
+| D12 | Portable camera-secret store (OS3) | **DONE** (W11 `a94e307`): environment, owner-only encrypted file, OS keyring; relay-only reads. |
 
 
 ## Sources used for this plan
