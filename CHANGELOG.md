@@ -25,6 +25,7 @@ A version is `MAJOR.MINOR.PATCH`, tagged `vMAJOR.MINOR.PATCH`. The public interf
 - Tests: the prune sandbox guard in the `cmd/holocron`, `internal/prune` and `internal/supervise` tests now names the folder `t.TempDir` uses, so the suite passes with `GOTMPDIR` set outside `TMPDIR`; no change to the guard or to any shipped behaviour ([docs/development.md](docs/development.md)).
 - Docs: live video in Firefox on a Mac is confirmed with a LAN media address (`LiveUdpAddress` `0.0.0.0:8189` plus `LiveAdvertiseHosts`); the earlier "unverified" wording is replaced.
 - Docs: planning notes (`tasks/holocron/todo.md`, `plan.md`) reconciled with what has shipped. `docs/limitations.md` no longer says Holocron runs live on Windows only or that `cam discover` was never run on a real network: the Operator reports both a real-network `cam discover` check and a Raspberry Pi 4 (2 GB) install (operator-reported, not proven by CI).
+- Repository: `.gitignore` now ignores macOS Finder metadata (`.DS_Store`); no change to any shipped behaviour.
 
 ## [1.5.0] - 2026-11-03
 
