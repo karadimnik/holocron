@@ -120,11 +120,15 @@ type liveHub struct {
 	pending      map[string]int
 	pendingTotal int
 	logged       map[string]bool
+
+	bw      bandwidthMeter // what the viewers receive, reported by their pages (bandwidth.go)
+	started time.Time      // when this table, so this run of the web app, began
 }
 
 func newLiveHub() *liveHub {
 	return &liveHub{
-		now: time.Now,
+		now:     time.Now,
+		started: time.Now(),
 		client: &http.Client{
 			// No proxy from the environment, no redirects, no compression:
 			// the call is one plain loopback request.

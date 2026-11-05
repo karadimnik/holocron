@@ -1581,8 +1581,13 @@ function checkVersion(payload) {
 }
 
 async function poll() {
+  // The check-in also tells camui how much video this page receives (live.js bandwidth); an ordinary one carries nothing extra.
+  let bandwidth = "";
+  try { bandwidth = await Live.bandwidth(); } catch (err) { bandwidth = ""; }
+  let answered = false;
   try {
-    const response = await fetch("api/status", { cache: "no-store" });
+    const response = await fetch("api/status" + (bandwidth ? "?" + bandwidth : ""), { cache: "no-store" });
+    answered = response.ok;
     if (!response.ok) throw new Error("HTTP " + response.status);
     last = await response.json();
     if (!el("stoppedPanel").hidden) {
@@ -1594,6 +1599,8 @@ async function poll() {
     if (window.Admin) window.Admin.status(last);
   } catch (err) {
     render(last, err.message || String(err));
+  } finally {
+    Live.bandwidthSent(answered);
   }
 }
 

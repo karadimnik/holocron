@@ -468,7 +468,7 @@ func TestLivePageNamesItsOpenSessions(t *testing.T) {
 	}
 }
 
-// The strip and the Admin table read the route and only that: nothing in them can change a session.
+// The Dashboard section and the Admin table read the route and only that: nothing in them can change a session.
 func TestOnlineUIOnlyReads(t *testing.T) {
 	app, _ := staticFiles.ReadFile("static/app.js")
 	admin, _ := staticFiles.ReadFile("static/admin.js")
@@ -481,8 +481,8 @@ func TestOnlineUIOnlyReads(t *testing.T) {
 	if !strings.Contains(string(admin), `getJSON("api/admin/sessions")`) || !strings.Contains(string(admin), "if (document.hidden) return;") {
 		t.Error("admin.js lost the hidden-aware poll")
 	}
-	if !strings.Contains(string(index), `id="onlineStrip"`) || !strings.Contains(string(admin), `id="aOnSigned"`) {
-		t.Error("the strip or the Admin table is missing")
+	if !strings.Contains(string(index), `id="onlinePanel"`) || strings.Contains(string(index), `id="onlineStrip"`) || !strings.Contains(string(admin), `id="aOnSigned"`) {
+		t.Error("the Dashboard section or the Admin table is missing, or the old strip is back")
 	}
 	if strings.Contains(string(admin), `sendJSON("api/admin/sessions"`) || strings.Contains(string(admin), `post("api/admin/sessions"`) {
 		t.Error("the page writes to the sessions route")

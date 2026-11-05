@@ -1415,5 +1415,76 @@ const Live = (() => {
       mode: view.mode, fitVw: view.fit ? view.fit.vw : null, fitVh: view.fit ? view.fit.vh : null, hiddenSince: view.hiddenSince, hiddenFor: hiddenSeconds(), freed: view.freed, grace: graceSeconds(), vis: document.visibilityState };
   };
 
-  return { onTab };
+  // ---- how much this page receives ----------------------------------------------
+  // Once per check-in (app.js asks every 5 s, the poll it already makes) the page adds up the bytes its live connections have
+  // received since the last time (inbound-rtp bytesReceived, one getStats() per connection, no new request and no timer),
+  // turns that into a rate for the chip on this tab, and hands app.js the query string that tells camui. The rate is the
+  // average over the interval, so it is steady rather than jumpy. A connection closed between two samples takes its last few
+  // seconds of bytes with it: the total reads slightly low, never high. Bytes of a check-in that failed stay owed and go with
+  // the next one.
+  const bw = { prev: new WeakMap(), pending: 0, at: 0, rate: 0, busy: false, page: pageId() };
+
+  function pageId() {
+    const raw = new Uint8Array(8);
+    if (window.crypto && window.crypto.getRandomValues) window.crypto.getRandomValues(raw);
+    else for (let i = 0; i < raw.length; i++) raw[i] = Math.floor(Math.random() * 256);
+    return Array.from(raw, (b) => b.toString(16).padStart(2, "0")).join("");
+  }
+
+  async function receivedBytes(pc) {
+    try {
+      const stats = await Promise.race([pc.getStats(), new Promise((resolve) => setTimeout(resolve, 3000))]);
+      if (!stats) return null;
+      let total = 0;
+      stats.forEach((r) => { if (r.type === "inbound-rtp" && Number.isFinite(r.bytesReceived)) total += r.bytesReceived; });
+      return total;
+    } catch (err) { return null; }
+  }
+
+  function bitRate(bps) {
+    if (bps >= 1e6) return (bps / 1e6).toFixed(1) + " Mb/s";
+    if (bps >= 1e3) return Math.round(bps / 1e3) + " kb/s";
+    return Math.round(bps) + " b/s";
+  }
+
+  // The chip on the Live tab: shown only while video is arriving.
+  function paintBandwidth(rate, playing) {
+    const chip = $("lbw");
+    if (!chip) return;
+    chip.textContent = playing ? bitRate(rate) : "";
+    chip.classList.toggle("hide", !playing);
+  }
+
+  // The query string for this check-in ("" when there is nothing to say: this page has no live connection and has said so).
+  async function bandwidth() {
+    if (bw.busy) return "";
+    const pcs = new Set();
+    for (const tile of view.tiles.values()) if (tile.pc) pcs.add(tile.pc);
+    if (view.modal && view.modal.conn && view.modal.conn.pc) pcs.add(view.modal.conn.pc);
+    if (!pcs.size && !bw.pending && !bw.rate) return "";
+    bw.busy = true;
+    const now = Date.now();
+    const seconds = Math.max(1, bw.at ? (now - bw.at) / 1000 : 5);
+    bw.at = now;
+    let delta = 0;
+    const counts = await Promise.all([...pcs].map(async (pc) => [pc, await receivedBytes(pc)]));
+    for (const [pc, total] of counts) {
+      if (total === null) continue;
+      const before = bw.prev.get(pc) || 0;
+      if (total >= before) delta += total - before;
+      bw.prev.set(pc, total);
+    }
+    bw.pending += delta;
+    bw.rate = Math.round((delta * 8) / seconds);
+    paintBandwidth(bw.rate, pcs.size > 0 && bw.rate > 0);
+    return "pg=" + bw.page + "&bw=" + bw.rate + "&bwb=" + Math.round(bw.pending);
+  }
+
+  // The check-in that carried the figures was answered: they are told, so they are no longer owed.
+  function bandwidthSent(ok) {
+    if (ok) bw.pending = 0;
+    bw.busy = false;
+  }
+
+  return { onTab, bandwidth, bandwidthSent };
 })();

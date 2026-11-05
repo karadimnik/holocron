@@ -97,7 +97,7 @@ func fetchSessions(ctx context.Context, addr string) (*web.SessionsReport, strin
 	body, _ := io.ReadAll(io.LimitReader(resp.Body, 4<<20))
 	switch {
 	case resp.StatusCode == http.StatusUnauthorized:
-		return nil, "the loopback listener wants a token (CAMUI_TOKEN is set for the web app), which this command does not send; open the Admin tab or the Online strip in a browser instead", nil
+		return nil, "the loopback listener wants a token (CAMUI_TOKEN is set for the web app), which this command does not send; open the Dashboard or the Admin tab in a browser instead", nil
 	case resp.StatusCode == http.StatusNotFound || resp.StatusCode == http.StatusMethodNotAllowed:
 		return nil, "something answers there but it does not know this route: it is not this version of the web app (restart it with holocron restart)", nil
 	case resp.StatusCode != http.StatusOK:
@@ -130,14 +130,15 @@ func writeSessions(w io.Writer, addr string, r *web.SessionsReport) {
 	fmt.Fprintf(w, "\nWATCHING (%d)\n", len(r.Watching))
 	if len(r.Watching) == 0 {
 		fmt.Fprintln(w, "  nobody")
-		return
+	} else {
+		tw := tabwriter.NewWriter(w, 2, 0, 2, ' ', 0)
+		fmt.Fprintln(tw, "  USER\tCAMERA\tSTREAM\tSESSIONS\tSINCE\tWHERE\tADDRESS")
+		for _, v := range r.Watching {
+			fmt.Fprintf(tw, "  %s\t%s\t%s\t%d\t%s\t%s\t%s\n", v.User, v.Camera, v.Streams, v.Count, clock(v.Since), orDash(v.Network), orDash(v.Peer))
+		}
+		tw.Flush()
 	}
-	tw := tabwriter.NewWriter(w, 2, 0, 2, ' ', 0)
-	fmt.Fprintln(tw, "  USER\tCAMERA\tSTREAM\tSESSIONS\tSINCE\tWHERE\tADDRESS")
-	for _, v := range r.Watching {
-		fmt.Fprintf(tw, "  %s\t%s\t%s\t%d\t%s\t%s\t%s\n", v.User, v.Camera, v.Streams, v.Count, clock(v.Since), orDash(v.Network), orDash(v.Peer))
-	}
-	tw.Flush()
+	writeBandwidth(w, r.Bandwidth)
 }
 
 // nowText is the state column: watching (with the cameras), online or not online.
@@ -173,4 +174,41 @@ func lastActive(now time.Time, s web.SignedInRow) string {
 		text = "~" + text
 	}
 	return text
+}
+
+// writeBandwidth prints what the viewers receive, as their pages report it (rates are what arrived in
+// the last few seconds; the totals are since the web app started and are lost at a restart).
+func writeBandwidth(w io.Writer, b web.BandwidthReport) {
+	fmt.Fprintf(w, "\nBANDWIDTH (video received by viewers, as their pages report it)\n")
+	fmt.Fprintf(w, "  now: %s from %d page(s) reporting in the last %d s (home network %s, internet %s)\n",
+		bitRate(b.CurrentBps), b.Viewers, b.WindowSeconds, bitRate(b.HomeBps), bitRate(b.InternetBps))
+	fmt.Fprintf(w, "  since %s: %s in total (home network %s, internet %s)\n",
+		clock(b.Since), byteSize(b.TotalBytes), byteSize(b.HomeBytes), byteSize(b.InternetBytes))
+	if b.RejectedReport > 0 {
+		fmt.Fprintf(w, "  %d implausible report(s) ignored\n", b.RejectedReport)
+	}
+}
+
+// bitRate is a rate in bits per second as "1.8 Mb/s".
+func bitRate(bps uint64) string {
+	switch {
+	case bps >= 1_000_000:
+		return fmt.Sprintf("%.1f Mb/s", float64(bps)/1e6)
+	case bps >= 1000:
+		return fmt.Sprintf("%d kb/s", (bps+500)/1000)
+	}
+	return fmt.Sprintf("%d b/s", bps)
+}
+
+// byteSize is a byte count as "1.20 GB" (decimal units, like the rates).
+func byteSize(n uint64) string {
+	switch {
+	case n >= 1_000_000_000:
+		return fmt.Sprintf("%.2f GB", float64(n)/1e9)
+	case n >= 1_000_000:
+		return fmt.Sprintf("%.1f MB", float64(n)/1e6)
+	case n >= 1000:
+		return fmt.Sprintf("%d kB", (n+500)/1000)
+	}
+	return fmt.Sprintf("%d B", n)
 }
