@@ -23,7 +23,9 @@ type whoRig struct {
 	root string
 }
 
-func newWhoRig(t *testing.T) *whoRig {
+func newWhoRig(t *testing.T) *whoRig { return newWhoRigWith(t, nil) }
+
+func newWhoRigWith(t *testing.T, mutate func(*Config)) *whoRig {
 	t.Helper()
 	up := newFakeUpstream(t)
 	lr := okRig(t, up)
@@ -33,6 +35,9 @@ func newWhoRig(t *testing.T) *whoRig {
 		c.TLSReadOnly = boolPtr(false)
 		c.ScriptDir = lr.dir
 		c.StatusFile = filepath.Join(lr.dir, "status.json")
+		if mutate != nil {
+			mutate(c)
+		}
 	}, withLive(hub))
 	hub.now = rig.clock.now
 	rig.addViewer(t)
@@ -92,7 +97,7 @@ func TestLiveTableRecordsWhoOpenedASession(t *testing.T) {
 		t.Fatalf("%d sessions, want 1", len(open))
 	}
 	got := open[0]
-	want := liveWho{user: testUser, loginID: loginIDOf(hashToken(cookie)), stream: "sub", peer: "192.168.1.20", remote: false}
+	want := liveWho{user: testUser, loginID: loginIDOf(hashToken(cookie)), stream: "sub", peer: "192.168.1.20", network: netLAN}
 	if got.liveWho != want || got.camera != "Cam One" || !got.started.Equal(opened) || !got.seen.Equal(opened) {
 		t.Errorf("recorded %+v camera %q started %v, want %+v at %v", got.liveWho, got.camera, got.started, want, opened)
 	}
@@ -110,7 +115,7 @@ func TestLiveTableRecordsWhoOpenedASession(t *testing.T) {
 			remote = &s
 		}
 	}
-	if remote == nil || !remote.remote || remote.peer != "203.0.113.7" {
+	if remote == nil || remote.network != netRemote || remote.peer != "203.0.113.7" {
 		t.Errorf("remote session recorded as %+v", remote)
 	}
 }
@@ -439,9 +444,9 @@ func TestPresenceMapStaysBounded(t *testing.T) {
 	var p presenceMap
 	now := time.Date(2026, 3, 1, 12, 0, 0, 0, time.UTC)
 	for i := 0; i < presenceKeep+50; i++ {
-		p.touch(string(rune('a'+i%26))+strings.Repeat("x", i), "u", "10.0.0.1", false, now.Add(-2*presenceIdle))
+		p.touch(string(rune('a'+i%26))+strings.Repeat("x", i), "u", "10.0.0.1", netLAN, now.Add(-2*presenceIdle))
 	}
-	p.touch("fresh", "u", "10.0.0.1", false, now)
+	p.touch("fresh", "u", "10.0.0.1", netLAN, now)
 	if len(p.m) > presenceKeep {
 		t.Errorf("%d entries, want at most %d once the idle ones are swept", len(p.m), presenceKeep)
 	}

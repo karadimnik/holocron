@@ -3,6 +3,7 @@ package config
 import (
 	"errors"
 	"net"
+	"net/netip"
 	"strconv"
 	"strings"
 )
@@ -20,6 +21,11 @@ type Web struct {
 	// RemoteHost is the public DNS name the HTTPS listener also answers to (remote access,
 	// viewer-only); "" = off. Normalised by NormalizeRemoteHost; needs TLSListen.
 	RemoteHost string `json:"remoteHost,omitempty"`
+	// TrustedProxy is the one address of a reverse proxy in front of the HTTPS listener (for example
+	// the loopback alias nginx binds with proxy_bind); "" = off. Only a request whose TCP peer is
+	// exactly this address has its client address read from X-Forwarded-For. Normalised by
+	// NormalizeTrustedProxy. Not omitted when empty, so `holocron config get` can show it.
+	TrustedProxy string `json:"trustedProxy"`
 }
 
 func defaultWeb() Web { return Web{Enabled: true, Listen: DefaultWebListen} }
@@ -81,6 +87,18 @@ func (d *decoder) web(c *Config) {
 				continue
 			}
 			w.RemoteHost = host
+		case "trustedproxy":
+			var s string
+			d.subStr(p, v, &s)
+			if d.lastProblemOn(p) {
+				continue
+			}
+			addr, err := NormalizeTrustedProxy(s)
+			if err != nil {
+				d.problem(p, "%v", err)
+				continue
+			}
+			w.TrustedProxy = addr
 		default:
 			d.warn(p, "unknown key, ignored")
 		}
@@ -88,6 +106,45 @@ func (d *decoder) web(c *Config) {
 	if w.RemoteHost != "" && w.TLSListen == "" && !d.hasProblemUnder("web.tlsListen") {
 		d.problem("web.remoteHost", "needs web.tlsListen: remote access is served only by the HTTPS login listener")
 	}
+}
+
+// NormalizeTrustedProxy validates web.trustedProxy: empty (off) or one IP address literal that is
+// loopback or private (RFC 1918, IPv6 ULA fc00::/7). Hostnames, wildcards, CIDR ranges, ports,
+// zones, the unspecified address and public, link-local or shared (CGNAT) addresses are refused:
+// the value says which TCP peer may name the real client in X-Forwarded-For, so it must be exactly
+// one address that only the proxy connects from. An IPv4-mapped IPv6 literal is written in its
+// IPv4 form. It returns the canonical text of the address.
+func NormalizeTrustedProxy(s string) (string, error) {
+	if s == "" {
+		return "", nil
+	}
+	bad := func(why string) error {
+		return errors.New("must be empty (off) or one loopback or private IP address such as 127.0.0.2: " + why)
+	}
+	if strings.ContainsAny(s, " \t\r\n") {
+		return "", bad("it contains a space")
+	}
+	if strings.Contains(s, "/") {
+		return "", bad("no CIDR range, only one address")
+	}
+	if strings.Contains(s, "*") {
+		return "", bad("no wildcard")
+	}
+	if strings.Contains(s, "%") {
+		return "", bad("no zone")
+	}
+	addr, err := netip.ParseAddr(s)
+	if err != nil {
+		return "", bad("got a value that is not an IP address (no host name, no port)")
+	}
+	addr = addr.Unmap()
+	switch {
+	case addr.IsUnspecified():
+		return "", bad("the unspecified address matches nothing in particular")
+	case addr.IsLoopback() || addr.IsPrivate():
+		return addr.String(), nil
+	}
+	return "", bad("a public, link-local or shared (100.64.0.0/10) address cannot be a proxy on this network")
 }
 
 // NormalizeRemoteHost validates web.remoteHost: empty (off) or one DNS host name of LDH labels,

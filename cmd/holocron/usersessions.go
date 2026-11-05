@@ -180,10 +180,10 @@ func lastActive(now time.Time, s web.SignedInRow) string {
 // the last few seconds; the totals are since the web app started and are lost at a restart).
 func writeBandwidth(w io.Writer, b web.BandwidthReport) {
 	fmt.Fprintf(w, "\nBANDWIDTH (video received by viewers, as their pages report it)\n")
-	fmt.Fprintf(w, "  now: %s from %d page(s) reporting in the last %d s (home network %s, internet %s)\n",
-		bitRate(b.CurrentBps), b.Viewers, b.WindowSeconds, bitRate(b.HomeBps), bitRate(b.InternetBps))
-	fmt.Fprintf(w, "  since %s: %s in total (home network %s, internet %s)\n",
-		clock(b.Since), byteSize(b.TotalBytes), byteSize(b.HomeBytes), byteSize(b.InternetBytes))
+	fmt.Fprintf(w, "  now: %s from %d page(s) reporting in the last %d s (home network %s, tailnet %s, internet %s)\n",
+		bitRate(b.CurrentBps), b.Viewers, b.WindowSeconds, bitRate(b.HomeBps), bitRate(b.TailnetBps), bitRate(b.InternetBps))
+	fmt.Fprintf(w, "  since %s: %s in total (home network %s, tailnet %s, internet %s)\n",
+		clock(b.Since), byteSize(b.TotalBytes), byteSize(b.HomeBytes), byteSize(b.TailnetBytes), byteSize(b.InternetBytes))
 	if b.RejectedReport > 0 {
 		fmt.Fprintf(w, "  %d implausible report(s) ignored\n", b.RejectedReport)
 	}

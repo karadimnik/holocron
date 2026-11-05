@@ -71,10 +71,10 @@ Both are changed in `holocron.config.json` and applied with `holocron restart --
 
 Two independent protections on the sign-in (`internal/web/auth_throttle.go`, `auth_service.go`):
 
-- **Per client address** (the TCP peer; forwarding headers are never trusted): 10 attempts a minute with a burst of 5, then 429 with `Retry-After`.
+- **Per client address** (the TCP peer; forwarding headers are never trusted, except from the one address named by [`web.trustedProxy`](#behind-a-reverse-proxy-or-a-tunnel), where the client it names is the address): 10 attempts a minute with a burst of 5, then 429 with `Retry-After`.
 - **Per user name**, existing or not: the first 4 consecutive failures cost nothing; the 5th locks the name for 30 s, and each further failure doubles it up to 15 minutes. While locked, even the correct password is refused (429 with `Retry-After`). A success resets the count; the count is forgotten after 24 hours of quiet. The counters are in the web app's memory, so restarting it clears them. A device already signed in is not affected.
 - An unknown name and a wrong password answer identically: `Invalid username or password`.
-- `auth.log` in the auth folder records time, peer address, attempted name and result (`ok`, `fail`, `throttled`, `locked`), plus sign-outs and unlock requests; never a password, hash or token. It is cut at 1 MiB to `auth.log.1`.
+- `auth.log` in the auth folder records time, client address (the peer, or behind a trusted proxy the client it named), attempted name and result (`ok`, `fail`, `throttled`, `locked`), plus sign-outs and unlock requests; never a password, hash or token. It is cut at 1 MiB to `auth.log.1`.
 
 To lift a lockout at once: `holocron user unlock anna`. It drops a marker file in `<authDir>/unlock/`; the running web app forgets the failures of that name at the next sign-in attempt for it (`auth_cli.go`, `auth_service.go`). The Admin tab shows a "Locked out" column and an unlock action for the same purpose; the column is only meaningful while the LAN listener runs (`lockoutsKnown` in `GET /api/admin/users`).
 
@@ -242,7 +242,7 @@ An admin can see who is signed in and who is watching which camera, right now. I
 **Where it comes from.**
 
 - The **live-view table** (`liveHub`, in memory, at most 24 entries) now remembers for each session the user, a short opaque **login id**, the stream (sub or main), the start time and the peer address. The login id is the first 8 characters of the SHA-256 of the session token (`loginIDOf`); the cookie itself is never kept or shown. A session opened on the loopback listener has no login and is shown as **this PC (no login)**, never as a user name. The loopback and the HTTPS listener share one table, so the 24-session and 6-per-camera caps are now counted over both together.
-- A **presence map** in the sign-in service notes, per login id, the time, peer address and LAN-or-remote of the last `GET /api/status` (every open page, every 5 s) or `GET /api/live` (the Live page, every 10 s) that passed the session gate. It is a map write under a mutex; it is not `Session.LastSeen`, which is still written to `sessions.json` at most every 10 minutes (`lastSeenGranularity`, unchanged). The map is lost when the web app restarts; every open page is back in it within 5 s. Peer addresses are kept in memory only (the sign-in peer already goes to `auth.log`).
+- A **presence map** in the sign-in service notes, per login id, the time, client address and class (LAN, tailnet or remote) of the last `GET /api/status` (every open page, every 5 s) or `GET /api/live` (the Live page, every 10 s) that passed the session gate. It is a map write under a mutex; it is not `Session.LastSeen`, which is still written to `sessions.json` at most every 10 minutes (`lastSeenGranularity`, unchanged). The map is lost when the web app restarts; every open page is back in it within 5 s. Peer addresses are kept in memory only (the sign-in address already goes to `auth.log`).
 
 **States** (per login session, "active" = a page of that login polled in the last 60 s):
 
@@ -256,7 +256,7 @@ A live-view session whose page went away without closing it (a crashed tab, a ph
 
 **Viewing for more than an hour.** A live-view entry still ends one hour after it was opened (`liveSessionTTL`, unchanged, so a lost entry cannot hold a slot longer). The Live page therefore names the sessions it still holds in the poll it already makes: `GET /api/live?open=<id>,<id>`. The web app pushes only those entries' expiry forward, and only entries opened by the same login. An id the page no longer knows is not named and expires at the hour.
 
-**The route.** `GET /api/admin/sessions` (admin class, read-only, also open on a view-only HTTPS listener; a viewer and every remote peer get 403, as for any admin route). It answers `signedIn` (login id, user, role, since, last activity, `precise`, online, state, cameras, peer, network `lan` or `remote`) and `watching` (one row per login and camera: user, camera, streams, count, earliest start, peer, network `lan`, `remote` or `local`), both in a stable order (user, then time or camera, then login id). It holds no cookie, no token hash and no password.
+**The route.** `GET /api/admin/sessions` (admin class, read-only, also open on a view-only HTTPS listener; a viewer and every remote peer get 403, as for any admin route). It answers `signedIn` (login id, user, role, since, last activity, `precise`, online, state, cameras, peer, network `lan`, `tailnet` or `remote`) and `watching` (one row per login and camera: user, camera, streams, count, earliest start, peer, network `lan`, `tailnet`, `remote` or `local`), both in a stable order (user, then time or camera, then login id). It holds no cookie, no token hash and no password.
 
 **In the page.** Every admin, also on a view-only HTTPS listener, sees a **Who's online** section on the Dashboard (who is online or watching, where from, and how many are signed in but not online) with the bandwidth figures described under [How much video the viewers receive](#how-much-video-the-viewers-receive). The Admin tab, where it is shown, has the full table (user, role, state, where, signed in, last activity) and the watching table. A viewer and a remote peer get no section: the server refuses them the route.
 
@@ -269,9 +269,9 @@ A live-view session whose page went away without closing it (a crashed tab, a ph
 Live video goes from MediaMTX straight to each browser, so Holocron never sees the bytes (and MediaMTX's API stays off). Each page measures its own: once per status check-in (`GET /api/status`, every 5 s, the poll every open page already makes) `live.js` adds up `bytesReceived` of the `inbound-rtp` stats of the page's live connections (one `getStats()` per connection, no new request or timer), turns the bytes since the previous check-in into a rate, and the check-in carries three more query parameters: `pg` (a random id of the page, so two tabs of one login are two pages), `bw` (the rate in bits per second) and `bwb` (the bytes since the previous check-in), both unsigned integers. Bytes of a check-in that failed stay owed to the next one. A connection closed between two samples takes its last seconds with it, so a total reads slightly low, never high.
 
 - **On the Live tab** a subtle chip next to the camera count shows the page's own current rate (for example `1.8 Mb/s`) while video plays, for every signed-in user, a viewer and a remote peer included. It shows the rate only, no total, and is hidden when nothing plays and in fullscreen.
-- **In Holocron** (`internal/web/bandwidth.go`) the live table keeps, in memory only: the latest rate of each page with its time, and running byte totals. The current combined rate is the sum of the rates received in the last 15 s (a closed or silent page drops out by itself); the total counts every reported byte since the web app last started and is lost at a restart. A report is counted as **home network** (a LAN peer, or the PC itself on the loopback listener) or **internet** by how its check-in arrived: the same remote-access test (`authService.remote`, the peer is outside private ranges and the request names `web.remoteHost`) that makes a remote login viewing-only. Nothing is written to disk, no connection is opened and no timer runs; the page map holds at most 256 pages.
+- **In Holocron** (`internal/web/bandwidth.go`) the live table keeps, in memory only: the latest rate of each page with its time, and running byte totals. The current combined rate is the sum of the rates received in the last 15 s (a closed or silent page drops out by itself); the total counts every reported byte since the web app last started and is lost at a restart. A report is counted as **home network** (a LAN client, or the PC itself on the loopback listener), **tailnet** (a Tailscale client: `100.64.0.0/10` or `fd7a:115c:a1e0::/48`) or **internet** by how its check-in arrived: the same class of the client (`authService.netClass`) that makes a remote login viewing-only. Behind a [trusted proxy](#behind-a-reverse-proxy-or-a-tunnel) the class is the real client's, so someone watching over 5G through `tailscale serve` is counted as tailnet, not as home. Nothing is written to disk, no connection is opened and no timer runs; the page map holds at most 256 pages.
 - **Reports are not trusted.** A report is ignored whole (the status answer is unaffected) and counted as "implausible" when `pg` is not 8 to 32 hex digits, `bw` or `bwb` is missing, negative, not an integer or past 64 bits, `bw` is above 1 Gbit/s, or `bwb` is more than 1 Gbit/s allows for the time since that page's previous report (at least 5 s, at most 120 s; a page's first report counts as 120 s). A page that reports falsely can only skew the figures it contributes, within those limits.
-- **Who sees it.** The aggregate (`bandwidth` in `GET /api/admin/sessions`: `currentBps`, `homeBps`, `internetBps`, `viewers`, `totalBytes`, `homeBytes`, `internetBytes`, `since`, `rejectedReports`) is part of the admin route and as admin-only as the rest of it. The Dashboard shows it to admins (current rate, home and internet split, total since start) and `holocron user sessions` prints it (`--json` includes it). A viewer's page shows only its own chip.
+- **Who sees it.** The aggregate (`bandwidth` in `GET /api/admin/sessions`: `currentBps`, `homeBps`, `tailnetBps`, `internetBps`, `viewers`, `totalBytes`, `homeBytes`, `tailnetBytes`, `internetBytes`, `since`, `rejectedReports`) is part of the admin route and as admin-only as the rest of it. The Dashboard shows it to admins (current rate, home, tailnet and internet split, total since start) and `holocron user sessions` prints it (`--json` includes it). A viewer's page shows only its own chip.
 - **Limits.** Only pages that are open and report count: recording traffic, a viewer on another program (VLC, a phone app) and a page whose browser is frozen are not in it, and a hidden tab that the browser slows to one check-in a minute may drop out of the current rate between check-ins.
 
 #### Cost of the online list
@@ -321,7 +321,7 @@ Off by default. Setting `web.remoteHost` in `holocron.config.json` to the public
 
 **Threat model in plain words.** Forwarding a router port exposes a sign-in page to the whole internet: anyone can reach it and try passwords. What protects the house is a strong password, the sign-in throttling below, and the cap that makes every remote session a viewer, so a guessed password or a stolen phone can watch the cameras but cannot stop recording, change settings, manage users or read the camera login. The loopback page (`127.0.0.1:8787`) has no login and treats every caller as an admin: it is never part of remote access, nothing forwards to it, and its port must never be forwarded.
 
-**Who counts as remote.** A request is remote when its TCP peer address, the address the connection actually came from, is public: not loopback, not private (`10/8`, `172.16/12`, `192.168/16`, IPv6 `fc00::/7`), not link-local, not carrier-grade NAT (`100.64.0.0/10`). No header decides it: `X-Forwarded-For`, `Forwarded` and the like are ignored, and the Host header (which a caller writes freely) cannot make a remote request local. A router port-forward keeps the caller's public source address, so a phone on 5G is remote. A device at home that uses the public name through the router's hairpin NAT arrives from a private address and keeps LAN behaviour. Behind a reverse proxy or tunnel every request would arrive from the proxy's address: that setup is not supported.
+**Who counts as remote.** A request is remote when its client address is public: not loopback, not private (`10/8`, `172.16/12`, `192.168/16`, IPv6 `fc00::/7`), not link-local, not carrier-grade NAT (`100.64.0.0/10`, which is [a tailnet's own class](#behind-a-reverse-proxy-or-a-tunnel), not remote). The client address is the TCP peer address, the address the connection actually came from. No header decides it, and the Host header (which a caller writes freely) cannot make a remote request local. The one exception is opt-in and pinned to a single address: with `web.trustedProxy` set, a connection that comes from exactly that address (your own reverse proxy) is classified by the `X-Forwarded-For` the proxy passes on, and a connection from any other address has the header ignored ([Behind a reverse proxy or a tunnel](#behind-a-reverse-proxy-or-a-tunnel)). A router port-forward keeps the caller's public source address, so a phone on 5G is remote. A device at home that uses the public name through the router's hairpin NAT arrives from a private address and keeps LAN behaviour. Behind a reverse proxy or tunnel with `web.trustedProxy` left empty, every request arrives from the proxy's address and is classified as that address (home): set the key to see the real clients.
 
 **What a remote request gets** (all in `internal/web/remote.go` and the session gate):
 
@@ -356,7 +356,69 @@ Lifetime rules checked on 29 Oct 2026: Apple's limit of 398 days applies only to
 
 To switch it off, remove `web.remoteHost`, restart, and delete the router's port-forward.
 
-**The alternative: a VPN.** A VPN into the home network (WireGuard on the router, or a mesh VPN such as Tailscale) exposes no sign-in page to the internet at all: the phone joins the LAN and uses the normal LAN address, the CA it already trusts, and live video works as at home. It is the safer choice when the router or the phone supports it; remote access is for when it does not.
+**The alternative: a VPN.** A VPN into the home network (WireGuard on the router, or a mesh VPN such as Tailscale) exposes no sign-in page to the internet at all: the phone joins the LAN and uses the normal LAN address, the CA it already trusts, and live video works as at home. It is the safer choice when the router or the phone supports it; remote access is for when it does not. If the VPN reaches Holocron through a reverse proxy on the Pi (for example `tailscale serve` in front of nginx), see [Behind a reverse proxy or a tunnel](#behind-a-reverse-proxy-or-a-tunnel) so that Holocron can tell those visitors from the home network.
+
+## Behind a reverse proxy or a tunnel
+
+Off by default. A reverse proxy on the Pi (nginx, Caddy, `tailscale serve`) that forwards to the HTTPS listener connects to it from the Pi itself, so Holocron sees one address for every visitor, whether they are on the sofa or on 5G through a tailnet. Without the setting below that is all it can do: every visit is classified as that one (private) address, "Who's online" labels it `lan`, the bandwidth figures count it as home, the sign-in throttle and `auth.log` see a single client.
+
+Set **`web.trustedProxy`** to the one address the proxy connects *from* and Holocron reads the real client from the proxy:
+
+```
+holocron config set web.trustedProxy 127.0.0.2
+holocron restart --detach
+```
+
+The value is read when the web app starts (a restart applies it; `holocron config set` prints the reminder). It must be one IP address literal that is loopback or private (`10/8`, `172.16/12`, `192.168/16`, IPv6 `fc00::/7`, `127.0.0.0/8`, `::1`). A host name, a wildcard, a CIDR range, a port, a zone, `0.0.0.0` and any public, link-local or `100.64.0.0/10` address are refused with a message, and the file is left as it was. Empty (the default) is off: Holocron then behaves exactly as before and never reads a forwarding header. `holocron status` and `holocron doctor --group web` (`web.proxy`) show the setting when it is on.
+
+**The rule** (`internal/web/clientaddr.go`, the one place the header is read):
+
+- A request whose TCP peer is **exactly** the trusted address has its client address taken from the **right-most** entry of `X-Forwarded-For` (several header lines count as one list, in order). Every other peer has the header ignored, so a LAN device, a tailnet device that reaches the listener directly or a public caller can write any header it likes and nothing changes.
+- Why the right-most entry: the entries to its left can have been written by the caller before the first proxy saw it; only the last was written or passed through by the proxy this setting trusts. `tailscale serve` sets the header to exactly the caller's tailnet address and removes any copy the caller sent, so there is a single entry. If a proxy in the chain appends its own peer (nginx's `$proxy_add_x_forwarded_for`), the right-most entry is that proxy's peer address instead, a loopback or private address, and the visit is labelled `lan`: the wrong label, never a more trusted one. Leave nginx's default (it passes the header through unchanged) and do not add `proxy_set_header X-Forwarded-For`.
+- A header that is missing, empty, has an empty or non-address right-most entry (`unknown`, a host name, an `ip:port`, a zone, a trailing comma) or is longer than 4 KiB is treated as absent. The client is then the proxy's own address, which is private, so the class is `lan`. The fallback is never a more trusted class than the proxy itself.
+
+**The classes** (`authService.netClass`), from the client address, whatever way it arrived:
+
+| Class | Client address | Granted |
+|---|---|---|
+| `tailnet` | `100.64.0.0/10`, `fd7a:115c:a1e0::/48` (Tailscale) | What the LAN is granted, today: sign-in required, the account's own role, `tlsReadOnly` as on the LAN. Only the label, the bandwidth bucket and the log lines are new. A tailnet device that reaches the HTTPS listener directly (a subnet route, say) is `tailnet` too, with no setting. |
+| `lan` | loopback, private, link-local, anything else not below | Unchanged. |
+| `remote` | public (or unparseable) | The [remote restrictions](#reaching-holocron-from-outside-the-home-network): viewer-only, view-only allow-list, the stricter 2-a-minute sign-in bucket, 12-hour and 7-day sessions. |
+
+A public client behind the trusted proxy is `remote` even when `web.remoteHost` is empty (it never gets LAN rights). The Host rule of remote access is unchanged: it must name `web.remoteHost`, so with remote access off such a client is refused (403), and with it on the proxy must pass that Host on for it. A proxy that rewrites Host (as in the how-to below) is meant for tailnet visitors, who are never public.
+
+**Where the real client shows.** "Who's online" on the Dashboard and the Admin tab and `holocron user sessions [--json]` show `tailnet`, `lan` or `remote` and the real address; the bandwidth block has three buckets, home network, tailnet and internet (`homeBps`, `tailnetBps`, `internetBps` and the matching byte totals); the sign-in throttle (per address) and the remote bucket are per real client; `auth.log`, the audit records (`from=`) and the live-view table hold the real address; the sign-in failure counts of `holocron doctor` are split into home, tailnet and internet. The per-name lockout is per name and unchanged.
+
+### How-to: `tailscale serve` in front of nginx in front of Holocron
+
+The setup: `tailscale serve` publishes `https://<host>.<tailnet>.ts.net` to your tailnet only and proxies to nginx on `127.0.0.1:18443`; nginx proxies to Holocron's HTTPS listener `https://192.168.1.50:8443` and rewrites Host and Origin to that address (Holocron only accepts its own address as Host; the Host and Origin guard is unchanged by `web.trustedProxy`). To tell tailnet visitors apart:
+
+1. Give nginx a dedicated source address for its connections to Holocron, in the `location` that has the `proxy_pass`:
+
+   ```nginx
+   location / {
+       proxy_pass https://192.168.1.50:8443;
+       proxy_bind 127.0.0.2;                     # the address Holocron will trust
+       proxy_set_header Host 192.168.1.50:8443;
+       # Do not set X-Forwarded-For: nginx then passes through the value tailscale serve set.
+       # (the rest of your proxy settings: Origin, Upgrade/Connection, proxy_ssl_verify, timeouts)
+   }
+   ```
+
+   Reload nginx. From now on every visit through the tailnet reaches Holocron from `127.0.0.2`; visits from the home network still arrive as themselves.
+2. Tell Holocron: `holocron config set web.trustedProxy 127.0.0.2`, then `holocron restart --detach`.
+3. Check: open Holocron through the tailnet address and look at "Who's online" (it shows `tailnet 100.x.y.z`), or run `holocron user sessions`; `holocron doctor --group web` lists `trusted proxy`. A wrong label is a sign the header is not what the rule expects: `holocron logs --component web` shows each sign-in with `from=` and `peer=`.
+
+`tailscale serve` sets `X-Forwarded-For` to the tailnet address of the caller and removes any copy the caller sent (checked in the Tailscale source at `ipn/ipnlocal/serve.go`, not on the Pi). Nothing here changes how `tailscale serve` or nginx is set up beyond `proxy_bind`. If you use another proxy, the requirements are the same: it connects from one address that only it uses, and it hands Holocron the real client as the right-most `X-Forwarded-For` entry.
+
+### Security notes
+
+- **Only a pinned address is trusted, and only for this header.** The key names one address; a LAN device, a tailnet device or the internet cannot make a packet arrive from it, so none of them can have its header believed. There is no "trust the whole LAN" or "trust loopback" setting: wildcards and ranges are refused on purpose.
+- **Why a dedicated address and not the Pi's own LAN address.** If nginx connected from `192.168.1.50` and you trusted that, every program on the Pi that can connect to the listener (any container on host networking, any other service) would be believed when it names a client, and a real LAN request from the Pi itself would be indistinguishable from the proxy's. With `proxy_bind 127.0.0.2;` the trusted address is one nobody else has reason to use. `holocron doctor` warns when `web.trustedProxy` equals the listener's own address.
+- **What it does not defend against.** On Linux any local process may use any `127.x` address as a source address, so a program on the Pi can still connect from `127.0.0.2`. Such a program is already inside the trust boundary (the loopback page at `127.0.0.1:8787` has no login and treats every caller as an admin). The setting does not widen that.
+- **The header is only as good as the proxy.** Trust the right-most entry only if the proxy writes it from the real connection. `tailscale serve` does; a proxy that copies a client-supplied header into the last position would let a client name itself. Public exposure through a proxy such as Tailscale Funnel is not what this is for: a public client is `remote`, but the setup around it (Host rewrite, certificate) is not supported.
+- **A tailnet client is not more restricted than a LAN client.** Anyone on your tailnet who can reach the proxy and has an account gets the account's role. Restrict the tailnet with Tailscale's ACLs and keep `tlsReadOnly` true unless you need control from there.
+- **What is not covered.** Video (WebRTC media) does not go through the proxy: it needs its own path, [Live video from outside the home network](#live-video-from-outside-the-home-network) or a subnet route. This setting changes labels, buckets and logs, not what is allowed.
 
 ## Live video from outside the home network
 

@@ -7,8 +7,8 @@ import (
 	"fmt"
 	"io/fs"
 	"log/slog"
-	"net"
 	"net/http"
+	"net/netip"
 	"net/url"
 	"strconv"
 	"strings"
@@ -50,6 +50,10 @@ type authService struct {
 
 	remoteHost string // web.remoteHost; "" = remote access off (remote.go)
 
+	// trustedProxy is web.trustedProxy: the one peer address whose X-Forwarded-For names the real
+	// client (clientaddr.go). The zero value is off: no header is read.
+	trustedProxy netip.Addr
+
 	presence presenceMap // who polled lately: memory only (presence.go)
 
 	hashSlots chan struct{}
@@ -71,16 +75,6 @@ func newAuthService(dir string, users UserStore, log *slog.Logger, now func() ti
 		now:           now,
 		hashSlots:     make(chan struct{}, maxConcurrentHashes),
 	}
-}
-
-// sourceIP is the peer address, without port. Forwarding headers are never trusted:
-// there is no proxy in front of this listener.
-func sourceIP(r *http.Request) string {
-	host, _, err := net.SplitHostPort(r.RemoteAddr)
-	if err != nil {
-		return r.RemoteAddr
-	}
-	return host
 }
 
 // Every auth action leaves two records with the same facts: a line in auth.log
@@ -113,13 +107,16 @@ func emit(log *slog.Logger, level slog.Level, action, actor, target, result stri
 // audit records a request-driven action: auth.log and the console. The actor of a
 // sign-in attempt is "anonymous" (nobody is signed in yet); of a sign-out, the user.
 func (a *authService) audit(r *http.Request, started time.Time, actor, target, event, result string) {
-	ip := sourceIP(r)
+	ip, viaProxy := a.clientIP(r)
 	if err := a.authLog.record(ip, target, event, result); err != nil {
 		emit(a.log, slog.LevelError, "auth.audit_write", actor, target, "fail", started, "error", err.Error())
 	}
 	extra := []any{"from", ip}
-	if a.remote(r) {
-		extra = append(extra, "peer", "remote")
+	if class := a.netClass(r); class != netLAN {
+		extra = append(extra, "peer", class)
+	}
+	if viaProxy {
+		extra = append(extra, "via", "trusted-proxy")
 	}
 	emit(a.log, resultLevel(result), authActions[event], actor, target, result, started, extra...)
 }
@@ -160,9 +157,11 @@ func (a *authService) signedIn(r *http.Request, remote bool) (User, string, bool
 // audit record. The class is the one of the pattern mux will run for the request.
 func (a *authService) gate(mux *http.ServeMux, next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		remote := a.remote(r)
-		if remote && hostName(r.Host) != a.remoteHost {
-			denied(a.log, r, User{}, "", "remote peer naming another host")
+		from, _ := a.clientIP(r)
+		network := a.netClass(r)
+		remote := network == netRemote
+		if remote && (a.remoteHost == "" || hostName(r.Host) != a.remoteHost) {
+			denied(a.log, r, from, User{}, "", "remote peer naming another host")
 			writeAPIError(w, http.StatusForbidden, "forbidden: host not allowed")
 			return
 		}
@@ -194,24 +193,24 @@ func (a *authService) gate(mux *http.ServeMux, next http.Handler) http.Handler {
 		switch {
 		case class == accessUnclassified:
 			a.log.Error("route has no access class: refused", "method", r.Method, "path", r.URL.Path, "route", pattern)
-			denied(a.log, r, user, pattern, "unclassified route")
+			denied(a.log, r, from, user, pattern, "unclassified route")
 			writeAPIError(w, http.StatusForbidden, "forbidden")
 			return
 		case class == accessAdmin && remote:
-			denied(a.log, r, user, pattern, "remote access is viewer-only")
+			denied(a.log, r, from, user, pattern, "remote access is viewer-only")
 			writeAPIError(w, http.StatusForbidden, adminOnlyMessage)
 			return
 		case class == accessAdmin && !isAdmin(user):
-			denied(a.log, r, user, pattern, "admins only")
+			denied(a.log, r, from, user, pattern, "admins only")
 			writeAPIError(w, http.StatusForbidden, adminOnlyMessage)
 			return
 		case remote && !readOnlyAllowed(r.Method, r.URL.Path):
-			denied(a.log, r, user, pattern, "remote access is view-only")
+			denied(a.log, r, from, user, pattern, "remote access is view-only")
 			writeAPIError(w, http.StatusForbidden, readOnlyMessage)
 			return
 		}
 		if pollRoutes[pattern] {
-			a.presence.touch(loginID, user.Username, sourceIP(r), remote, a.now())
+			a.presence.touch(loginID, user.Username, from, network, a.now())
 		}
 		next.ServeHTTP(w, r)
 	})
@@ -352,15 +351,16 @@ func (a *authService) handleLogin(w http.ResponseWriter, r *http.Request) {
 	name := formUsername(req.Username) // before the lookup, the lockout key and the log
 	setTarget(r, cleanLoggedName(name))
 
-	ok, wait := a.limiter.allow(sourceIP(r))
-	emit(a.log, slog.LevelDebug, "auth.limiter", "anonymous", name, map[bool]string{true: "allowed", false: "throttled"}[ok], started, "from", sourceIP(r), "waitMs", wait.Milliseconds())
+	from, _ := a.clientIP(r) // the throttle and the lockout log are per real client behind a trusted proxy
+	ok, wait := a.limiter.allow(from)
+	emit(a.log, slog.LevelDebug, "auth.limiter", "anonymous", name, map[bool]string{true: "allowed", false: "throttled"}[ok], started, "from", from, "waitMs", wait.Milliseconds())
 	if !ok {
 		a.audit(r, started, "anonymous", name, "login", "throttled")
 		tooManyAttempts(w, wait)
 		return
 	}
 	if a.remote(r) {
-		ok, wait := a.remoteLimiter.allow(remotePeerKey(sourceIP(r)))
+		ok, wait := a.remoteLimiter.allow(remotePeerKey(from))
 		if !ok {
 			a.audit(r, started, "anonymous", name, "login", "throttled")
 			tooManyAttempts(w, wait)
@@ -552,8 +552,8 @@ func (l *loopbackAuth) handleSetup(w http.ResponseWriter, r *http.Request) {
 		writeAPIError(w, http.StatusInternalServerError, "could not save the user")
 		return
 	}
-	_ = l.audit.record(sourceIP(r), user.Username, "setup", "ok")
-	emit(l.log, slog.LevelInfo, "user.create", "local", user.Username, "ok", started, "from", sourceIP(r))
+	_ = l.audit.record(peerAddr(r), user.Username, "setup", "ok")
+	emit(l.log, slog.LevelInfo, "user.create", "local", user.Username, "ok", started, "from", peerAddr(r))
 	writeJSON(w, http.StatusCreated, map[string]any{"ok": true, "username": user.Username})
 }
 

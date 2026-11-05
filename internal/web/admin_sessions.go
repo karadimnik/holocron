@@ -25,11 +25,14 @@ const (
 	stateNotOnline = "not-online" // not active in the last minute (or not since the web app started)
 )
 
-// Where a peer is: the home network, outside it, or the PC itself.
+// Where a client is: the home network, a Tailscale tailnet, outside both (the internet), or the PC
+// itself. A tailnet client gets what a LAN client gets (it signs in, its role and the view-only
+// setting apply as on the LAN); the class is only a label and a bandwidth bucket.
 const (
-	netLAN    = "lan"
-	netRemote = "remote"
-	netLocal  = "local"
+	netLAN     = "lan"
+	netTailnet = "tailnet"
+	netRemote  = "remote"
+	netLocal   = "local"
 )
 
 // SignedInRow is one login session of GET /api/admin/sessions.
@@ -46,7 +49,7 @@ type SignedInRow struct {
 	State   string   `json:"state"`
 	Cameras []string `json:"cameras"` // what it is watching, empty unless State is watching
 	Peer    string   `json:"peer"`    // "" until the first poll of this run
-	Network string   `json:"network"` // lan, remote, or "" when unknown
+	Network string   `json:"network"` // lan, tailnet, remote, or "" when unknown
 }
 
 // WatchRow is the live-view sessions of one login on one camera.
@@ -74,12 +77,13 @@ type SessionsReport struct {
 	Bandwidth BandwidthReport `json:"bandwidth"`
 }
 
-func networkOf(remote, local bool) string {
+// networkOf is the Network column of a client: class is its netClass ("" = LAN), local the PC itself.
+func networkOf(class string, local bool) string {
 	switch {
 	case local:
 		return netLocal
-	case remote:
-		return netRemote
+	case class == netRemote || class == netTailnet:
+		return class
 	}
 	return netLAN
 }
@@ -132,7 +136,7 @@ func (a *API) handleAdminSessions(w http.ResponseWriter, r *http.Request) {
 			row := SignedInRow{LoginID: id, User: user.Username, Role: effectiveRole(user.Role), Since: sess.CreatedAt,
 				LastActivity: sess.LastSeen, Cameras: []string{}, State: stateNotOnline}
 			if e, ok := a.auth.presence.get(id); ok {
-				row.Peer, row.Network = e.peer, networkOf(e.remote, false)
+				row.Peer, row.Network = e.peer, networkOf(e.network, false)
 				if !e.last.Before(row.LastActivity) {
 					row.LastActivity, row.Precise = e.last, true
 				}
@@ -170,7 +174,7 @@ func groupWatching(live []liveSession) []WatchRow {
 		row := rows[k]
 		if row == nil {
 			row = &WatchRow{LoginID: s.loginID, User: s.user, Camera: s.camera, Since: s.started, Peer: s.peer,
-				Network: networkOf(s.remote, s.loginID == ""), ThisPC: s.loginID == ""}
+				Network: networkOf(s.network, s.loginID == ""), ThisPC: s.loginID == ""}
 			if row.ThisPC {
 				row.User = thisPC
 			}

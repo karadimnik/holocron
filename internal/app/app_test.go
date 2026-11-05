@@ -653,3 +653,39 @@ func mustRead(t *testing.T, path string) []byte {
 	}
 	return b
 }
+
+// web.trustedProxy is editable: a loopback or private address is taken, anything else is refused
+// and leaves the file as it was, and unset puts it back to off.
+func TestEditConfigWebTrustedProxy(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "holocron.config.json")
+	os.WriteFile(path, []byte(sampleConfig), 0o644)
+	if _, err := EditConfig(path, "Web.TrustedProxy", ParseValue("127.0.0.2"), plat); err != nil {
+		t.Fatal(err)
+	}
+	c, _, err := config.Load(path, plat)
+	if err != nil || c.Web.TrustedProxy != "127.0.0.2" {
+		t.Fatalf("after set: %q %v", c.Web.TrustedProxy, err)
+	}
+	if v, err := EffectiveValue(c, "web.trustedProxy"); err != nil || v != "127.0.0.2" {
+		t.Errorf("effective value %v %v", v, err)
+	}
+	set, _ := os.ReadFile(path)
+	for _, bad := range []string{"0.0.0.0", "203.0.113.7", "192.168.1.0/24", "nginx.lan", "127.0.0.2:80", "*"} {
+		if _, err := EditConfig(path, "web.trustedProxy", ParseValue(bad), plat); !errors.Is(err, cli.ErrRefused) {
+			t.Errorf("%q: %v", bad, err)
+		}
+		if b, _ := os.ReadFile(path); string(b) != string(set) {
+			t.Fatalf("%q changed the file", bad)
+		}
+	}
+	if _, err := EditConfig(path, "web.trustedProxy", nil, plat); err != nil {
+		t.Fatal(err)
+	}
+	c, _, err = config.Load(path, plat)
+	if err != nil || c.Web.TrustedProxy != "" {
+		t.Errorf("after unset: %q %v", c.Web.TrustedProxy, err)
+	}
+	if v, err := EffectiveValue(c, "web.trustedProxy"); err != nil || v != "" {
+		t.Errorf("unset, effective value %#v %v: `config get` must show the key", v, err)
+	}
+}

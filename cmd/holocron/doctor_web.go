@@ -28,6 +28,7 @@ var webTable = []doctorCheck{
 	{id: "web.tls", group: "web", concurrent: true, run: webTLS},
 	{id: "web.users", group: "web", run: webUsers},
 	{id: "web.remote", group: "web", run: webRemote},
+	{id: "web.proxy", group: "web", run: webProxy},
 	{id: "web.errors", group: "web", run: webErrors},
 }
 
@@ -254,7 +255,32 @@ func webRemote(_ context.Context, r *drun) []check {
 		for _, p := range fails.TopPeers {
 			top = append(top, fmt.Sprintf("%s (%d)", p.Peer, p.Count))
 		}
-		out = append(out, mk(lvWarn, "remote access", "%d failed or locked remote sign-in attempt(s) in 24 h (LAN: %d); top peers: %s", fails.Remote, fails.LAN, strings.Join(top, ", ")).fix("holocron logs --component web --since 24h ; use strong passwords (holocron user passwd NAME) ; to close remote access remove web.remoteHost and the router's port-forward"))
+		out = append(out, mk(lvWarn, "remote access", "%d failed or locked remote sign-in attempt(s) in 24 h (LAN: %d, tailnet: %d); top peers: %s", fails.Remote, fails.LAN, fails.Tailnet, strings.Join(top, ", ")).fix("holocron logs --component web --since 24h ; use strong passwords (holocron user passwd NAME) ; to close remote access remove web.remoteHost and the router's port-forward"))
+	}
+	return out
+}
+
+// webProxy: the trusted proxy (web.trustedProxy). Off: no line. On: which address may name the real
+// client, what the 24 h of refused sign-ins look like per class (auth.log holds the client the proxy
+// named), and a warning for each thing that undermines it.
+func webProxy(_ context.Context, r *drun) []check {
+	w := r.e.cfg.Web
+	if !w.Enabled || w.TrustedProxy == "" {
+		return nil
+	}
+	const docs = "docs/ui.md, section \"Behind a reverse proxy or a tunnel\""
+	if w.TLSListen == "" {
+		return []check{mk(lvWarn, "trusted proxy", "web.trustedProxy is %s but web.tlsListen is empty: only the HTTPS login listener reads X-Forwarded-For", w.TrustedProxy).fix("set web.tlsListen to this PC's private IPv4:port in %s, or holocron config set web.trustedProxy \"\" ; see %s", r.e.paths.Config, docs)}
+	}
+	data := map[string]any{"trustedProxy": w.TrustedProxy}
+	detail := fmt.Sprintf("X-Forwarded-For is read only from connections that come from %s; every other peer's header is ignored. Visitors are labelled lan, tailnet or remote by the address the proxy names", w.TrustedProxy)
+	if fails, err := web.ReadSignInFailures(w.AuthDir, r.now.Add(-24*time.Hour)); err == nil {
+		data["signInFailures24h"] = fails
+		detail += fmt.Sprintf("; refused sign-ins in 24 h: %d from home, %d from the tailnet, %d from the internet", fails.LAN, fails.Tailnet, fails.Remote)
+	}
+	out := []check{mk(lvInfo, "trusted proxy", "%s", detail).data(data)}
+	if host, _, err := net.SplitHostPort(w.TLSListen); err == nil && host == w.TrustedProxy {
+		out = append(out, mk(lvWarn, "trusted proxy", "web.trustedProxy %s is this PC's own HTTPS listener address: every program on this PC that connects to it is trusted to name any client", w.TrustedProxy).fix("give the proxy its own address (nginx: proxy_bind 127.0.0.2;) and holocron config set web.trustedProxy 127.0.0.2 ; see %s", docs))
 	}
 	return out
 }

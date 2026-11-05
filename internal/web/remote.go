@@ -17,10 +17,12 @@ import (
 // Remote access (web.remoteHost): the HTTPS listener also answers to one public DNS name, for a
 // phone outside the home network reached through a router port-forward. A request is REMOTE when
 // RemoteHost is set and its TCP peer address is public. The class comes from the peer address
-// only, never from a header: X-Forwarded-For and the like are not read, and the Host header is
-// the client's to write (a remote caller can send Host: <the LAN address>). A port-forward keeps
+// (or the trusted proxy's client, below), never from any other header: the Host header is the
+// client's to write (a remote caller can send Host: <the LAN address>). A port-forward keeps
 // the caller's public source address; a LAN device that uses the public name through the
-// router's hairpin NAT arrives from a private address and stays a LAN request.
+// router's hairpin NAT arrives from a private address and stays a LAN request. With
+// web.trustedProxy set, a request from that one proxy address is classified by the client the
+// proxy names in X-Forwarded-For instead (clientaddr.go); from every other peer no header is read.
 //
 // A remote request is capped to the viewer experience in authService.gate, the one choke point:
 // it must name RemoteHost as its Host, its user's effective role is viewer whatever the account's
@@ -46,9 +48,11 @@ func PeerIsRemote(ip string) bool {
 	return !local
 }
 
-// remote reports whether r is a remote request (RemoteHost set and a public peer).
+// remote reports whether r is a remote request: its client address (the TCP peer, or behind a
+// trusted proxy the address that proxy names, clientaddr.go) is public, and remote access is on or
+// the address came from the proxy.
 func (a *authService) remote(r *http.Request) bool {
-	return a.remoteHost != "" && PeerIsRemote(sourceIP(r))
+	return a.netClass(r) == netRemote
 }
 
 // A remote session ends after 12 hours without use or 7 days after sign-in, whichever is first
@@ -122,9 +126,11 @@ type PeerCount struct {
 }
 
 // SignInFailures is what auth.log says about refused sign-in attempts (fail, locked, throttled)
-// since a moment, by peer class (PeerIsRemote of the logged address).
+// since a moment, by the class of the logged address (public: remote; tailnet; else LAN). The
+// logged address is the client's: the one a trusted proxy named, or the TCP peer.
 type SignInFailures struct {
 	Remote   int         `json:"remote"`
+	Tailnet  int         `json:"tailnet"`
 	LAN      int         `json:"lan"`
 	TopPeers []PeerCount `json:"topRemotePeers"` // the 3 remote peers with the most, most first
 }
@@ -160,8 +166,12 @@ func ReadSignInFailures(authDir string, since time.Time) (SignInFailures, error)
 				continue
 			}
 			ip := strings.TrimPrefix(f[1], "ip=")
-			if !PeerIsRemote(ip) {
+			switch addrClass(ip) {
+			case netLAN:
 				out.LAN++
+				continue
+			case netTailnet:
+				out.Tailnet++
 				continue
 			}
 			out.Remote++

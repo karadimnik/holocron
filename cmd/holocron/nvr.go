@@ -218,14 +218,16 @@ type webReport struct {
 	TLSListen string `json:"tlsListen,omitempty"`
 	// RemoteHost is web.remoteHost while remote access is on (the HTTPS listener set too).
 	RemoteHost string `json:"remoteHost,omitempty"`
-	Login      bool   `json:"login"`
-	LoginNote  string `json:"loginNote,omitempty"`
+	// TrustedProxy is web.trustedProxy while it is set (the HTTPS listener set too).
+	TrustedProxy string `json:"trustedProxy,omitempty"`
+	Login        bool   `json:"login"`
+	LoginNote    string `json:"loginNote,omitempty"`
 }
 
 func webStatus(e *env) webReport {
 	w := webReport{Enabled: e.cfg.Web.Enabled, Listen: e.cfg.Web.Listen, TLS: e.cfg.Web.TLSListen != "", TLSListen: e.cfg.Web.TLSListen}
 	if w.TLS {
-		w.RemoteHost = e.cfg.Web.RemoteHost
+		w.RemoteHost, w.TrustedProxy = e.cfg.Web.RemoteHost, e.cfg.Web.TrustedProxy
 	}
 	entries, err := osx.NewRegistry(e.paths.AuxFile()).Load()
 	if err == nil {
@@ -382,6 +384,9 @@ func printWeb(w io.Writer, r webReport) {
 	fmt.Fprintf(w, ", login %s\n", map[bool]string{true: "exists", false: "none yet"}[r.Login])
 	if r.RemoteHost != "" {
 		fmt.Fprintf(w, "remote access: on (viewer-only) for %s\n", r.RemoteHost)
+	}
+	if r.TrustedProxy != "" {
+		fmt.Fprintf(w, "trusted proxy: %s (X-Forwarded-For is read only from it)\n", r.TrustedProxy)
 	}
 }
 

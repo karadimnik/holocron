@@ -136,8 +136,8 @@ func TestUserSessionsRefusesArguments(t *testing.T) {
 
 func TestUserSessionsShowsTheBandwidth(t *testing.T) {
 	rep := sampleReport()
-	rep.Bandwidth = web.BandwidthReport{CurrentBps: 2_600_000, HomeBps: 1_800_000, InternetBps: 800_000, Viewers: 3, WindowSeconds: 15,
-		TotalBytes: 1_500_000_000, HomeBytes: 1_200_000_000, InternetBytes: 300_000_000, Since: sessionsNow.Add(-2 * time.Hour), RejectedReport: 2}
+	rep.Bandwidth = web.BandwidthReport{CurrentBps: 2_600_000, HomeBps: 1_800_000, TailnetBps: 500_000, InternetBps: 300_000, Viewers: 3, WindowSeconds: 15,
+		TotalBytes: 1_500_000_000, HomeBytes: 1_000_000_000, TailnetBytes: 200_000_000, InternetBytes: 300_000_000, Since: sessionsNow.Add(-2 * time.Hour), RejectedReport: 2}
 	srv, _ := sessionsServer(t, rep)
 	r := newRig(t)
 	r.listenOn(strings.TrimPrefix(srv.URL, "http://"), "")
@@ -145,8 +145,8 @@ func TestUserSessionsShowsTheBandwidth(t *testing.T) {
 	if code != 0 || errw != "" {
 		t.Fatalf("user sessions: %d %q %q", code, out, errw)
 	}
-	for _, want := range []string{"BANDWIDTH", "now: 2.6 Mb/s from 3 page(s)", "home network 1.8 Mb/s, internet 800 kb/s",
-		"1.50 GB in total (home network 1.20 GB, internet 300.0 MB)", "2 implausible report(s) ignored"} {
+	for _, want := range []string{"BANDWIDTH", "now: 2.6 Mb/s from 3 page(s)", "home network 1.8 Mb/s, tailnet 500 kb/s, internet 300 kb/s",
+		"1.50 GB in total (home network 1.00 GB, tailnet 200.0 MB, internet 300.0 MB)", "2 implausible report(s) ignored"} {
 		if !strings.Contains(out, want) {
 			t.Errorf("no %q in\n%s", want, out)
 		}

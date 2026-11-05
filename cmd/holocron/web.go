@@ -17,7 +17,7 @@ import (
 func webBase(e *env) web.Config {
 	return web.Config{
 		Listen: e.cfg.Web.Listen, TLSListen: e.cfg.Web.TLSListen, TLSDir: e.cfg.Web.TLSDir, AuthDir: e.cfg.Web.AuthDir,
-		RemoteHost:  e.cfg.Web.RemoteHost,
+		RemoteHost: e.cfg.Web.RemoteHost, TrustedProxy: e.cfg.Web.TrustedProxy,
 		ArchiveRoot: e.paths.Root, CamerasPath: e.paths.Cameras, ConfigPath: e.paths.Config,
 		LiveSecretDir: e.opts.Platform.Dirs().Auth,
 	}
