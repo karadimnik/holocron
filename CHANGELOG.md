@@ -20,6 +20,8 @@ A version is `MAJOR.MINOR.PATCH`, tagged `vMAJOR.MINOR.PATCH`. The public interf
 
 ## [Unreleased]
 
+## [1.6.0] - 2026-11-05
+
 ### Added
 
 - `holocron user sessions [--json]` and `GET /api/admin/sessions`: an admin sees who is signed in and who is watching which camera (user, role, stream, since, peer address, LAN or remote; "this PC (no login)" for the loopback listener). Memory only, no new disk write, timer or poll; the route is admin-only, read-only and also open on the default view-only HTTPS listener. The Live page names its open sessions in its existing `GET /api/live` poll (`?open=`), so a viewer who stays longer than an hour keeps showing as watching while a lost session still expires at the hour. Admins also get an "Online now" strip under the tabs (also on the view-only listener) and a "Who is online" table in the Admin tab. The loopback and HTTPS listeners now share one live-view table, so its 24-session cap counts both ([docs/ui.md](docs/ui.md#who-is-online-and-who-is-watching)).
@@ -162,7 +164,8 @@ The first version of Holocron in its own repository: a Go network video recorder
 - Builds for Windows (first-class and live), Linux and macOS, cross-compiled and tested in CI.
 - Licence: [PolyForm Noncommercial License 1.0.0](LICENSE) (decision D22).
 
-[Unreleased]: https://github.com/karadimnik/holocron/compare/v1.5.0...HEAD
+[Unreleased]: https://github.com/karadimnik/holocron/compare/v1.6.0...HEAD
+[1.6.0]: https://github.com/karadimnik/holocron/compare/v1.5.0...v1.6.0
 [1.5.0]: https://github.com/karadimnik/holocron/compare/v1.4.3...v1.5.0
 [1.4.3]: https://github.com/karadimnik/holocron/compare/v1.4.2...v1.4.3
 [1.4.2]: https://github.com/karadimnik/holocron/compare/v1.4.1...v1.4.2
