@@ -60,3 +60,6 @@ tls/
 
 # Output of local golden runs (carries machine-specific paths): never commit
 testdata/golden/status/generated/
+
+# macOS Finder metadata
+.DS_Store
