@@ -20,11 +20,17 @@ A version is `MAJOR.MINOR.PATCH`, tagged `vMAJOR.MINOR.PATCH`. The public interf
 
 ## [Unreleased]
 
+## [1.8.0] - 2026-11-06
+
+Holocron can now tell tailnet visitors from the home network when it sits behind a reverse proxy such as nginx with `tailscale serve`. The new setting is **off by default**, so nothing changes until you turn it on.
+
+**After upgrading, to use it:** run `holocron config set web.trustedProxy <proxy address>` (the one loopback or private address the proxy connects from, for example `127.0.0.2`), then restart with `holocron restart --detach`; the key is read when the web app starts. The how-to, with the nginx `proxy_bind 127.0.0.2;` line, is in [docs/ui.md](docs/ui.md#behind-a-reverse-proxy-or-a-tunnel). Without the setting, only the Tailscale relabelling below applies.
+
 ### Added
 
-- Behind a reverse proxy or a tunnel (nginx, `tailscale serve`), Holocron can now tell who is really visiting. The new opt-in key `web.trustedProxy` (editable with `holocron config set web.trustedProxy 127.0.0.2`, read when the web app starts; empty and off by default) names the one loopback or private address the proxy connects from; a connection from exactly that address has its client read from the right-most `X-Forwarded-For` entry, and a connection from any other address has the header ignored. Host names, wildcards, CIDR ranges, ports and public addresses are refused. A missing or malformed header falls back to the proxy's own address, never to a more trusted class.
-- A new `tailnet` class for Tailscale addresses (`100.64.0.0/10`, `fd7a:115c:a1e0::/48`), from any source. It is granted what the LAN is granted (sign-in, the account's role, `tlsReadOnly` as on the LAN); it is a label, a bandwidth bucket and a log field. It shows in Who's online (Dashboard and Admin), `holocron user sessions [--json]` and the bandwidth block, which now has three buckets: home network, tailnet and internet (`tailnetBps` and `tailnetBytes` in `GET /api/admin/sessions`, a Tailnet tile on the Dashboard).
-- Behind the trusted proxy the sign-in throttle, `auth.log`, the audit records, the live-view table and Who's online are per real client instead of one shared proxy address, and a public client behind it gets the remote restrictions (viewer-only, stricter sign-in bucket, short sessions; it is refused when remote access is off). `holocron doctor --group web` has a `web.proxy` line and `holocron status` a `trusted proxy` line when the key is set; the doctor's sign-in failure counts include the tailnet. A how-to for `tailscale serve` with nginx (`proxy_bind 127.0.0.2;`) and the security notes are in [docs/ui.md](docs/ui.md#behind-a-reverse-proxy-or-a-tunnel).
+- `web.trustedProxy`, an opt-in key (empty and off by default) that names the one loopback or private address your reverse proxy or tunnel connects from. A connection from exactly that address has its client read from the right-most `X-Forwarded-For` entry; a connection from any other address has the header ignored. Host names, wildcards, CIDR ranges, ports and public addresses are refused. A missing or malformed header falls back to the proxy's own address, never to a more trusted class.
+- A `tailnet` class for Tailscale addresses (`100.64.0.0/10`, `fd7a:115c:a1e0::/48`), from any source. It is granted what the LAN is granted (sign-in, the account's role, `tlsReadOnly` as on the LAN); it is a label, a bandwidth bucket and a log field. It shows in Who's online (Dashboard and Admin), in `holocron user sessions [--json]` and in the bandwidth block, which now has three buckets: home network, tailnet and internet (`tailnetBps` and `tailnetBytes` in `GET /api/admin/sessions`, and a Tailnet tile on the Dashboard).
+- Behind the trusted proxy, the sign-in throttle, `auth.log`, the audit records, the live-view table and Who's online work per real client instead of one shared proxy address, and a public client behind it gets the remote restrictions (viewer-only, stricter sign-in bucket, short sessions; it is refused when remote access is off). `holocron doctor --group web` has a `web.proxy` line and `holocron status` a `trusted proxy` line when the key is set; the doctor's sign-in failure counts include the tailnet. The security notes are in [docs/ui.md](docs/ui.md#behind-a-reverse-proxy-or-a-tunnel).
 
 ### Changed
 
@@ -187,7 +193,8 @@ The first version of Holocron in its own repository: a Go network video recorder
 - Builds for Windows (first-class and live), Linux and macOS, cross-compiled and tested in CI.
 - Licence: [PolyForm Noncommercial License 1.0.0](LICENSE) (decision D22).
 
-[Unreleased]: https://github.com/karadimnik/holocron/compare/v1.7.0...HEAD
+[Unreleased]: https://github.com/karadimnik/holocron/compare/v1.8.0...HEAD
+[1.8.0]: https://github.com/karadimnik/holocron/compare/v1.7.0...v1.8.0
 [1.7.0]: https://github.com/karadimnik/holocron/compare/v1.6.0...v1.7.0
 [1.6.0]: https://github.com/karadimnik/holocron/compare/v1.5.0...v1.6.0
 [1.5.0]: https://github.com/karadimnik/holocron/compare/v1.4.3...v1.5.0
