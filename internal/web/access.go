@@ -105,10 +105,11 @@ func accessOf(mux *http.ServeMux, r *http.Request) (access, string) {
 	return routeAccess[pattern], pattern
 }
 
-// denied records a refused request in the audit stream: who, what, and why.
-func denied(log *slog.Logger, r *http.Request, user User, pattern, why string) {
+// denied records a refused request in the audit stream: who, what, and why. from is the client
+// address (authService.clientIP).
+func denied(log *slog.Logger, r *http.Request, from string, user User, pattern, why string) {
 	log.LogAttrs(context.Background(), slog.LevelWarn, "access.denied",
 		slog.String("component", authComponent), logx.Action("web.access"), logx.Actor(cli.WebActor(cleanLoggedName(user.Username))),
 		logx.Target(r.Method+" "+cleanLoggedName(r.URL.Path)), logx.Result("denied"), slog.String("role", effectiveRole(user.Role)),
-		slog.String("route", pattern), slog.String("reason", why), slog.String("from", sourceIP(r)), logx.Audit())
+		slog.String("route", pattern), slog.String("reason", why), slog.String("from", from), logx.Audit())
 }

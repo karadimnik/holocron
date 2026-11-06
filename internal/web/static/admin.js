@@ -648,7 +648,7 @@
     if (s < 172800) return Math.round(s / 3600) + " h";
     return Math.round(s / 86400) + " d";
   }
-  const where = (net, peer) => (net === "local" ? "this PC" : net === "remote" ? "remote " : net === "lan" ? "LAN " : "") + (net === "local" ? "" : peer || "-");
+  const where = (net, peer) => (net === "local" ? "this PC" : net === "remote" ? "remote " : net === "tailnet" ? "tailnet " : net === "lan" ? "LAN " : "") + (net === "local" ? "" : peer || "-");
 
   function renderOnline(rep) {
     if (!rep) {
@@ -699,6 +699,7 @@
     const tile = (lab, val, sub) => '<div class="tile"><div class="lab">' + esc(lab) + '</div><div class="val">' + esc(val) + '</div><div class="sub">' + esc(sub) + "</div></div>";
     return tile("Receiving now", bits(b.currentBps), b.viewers + (b.viewers === 1 ? " page" : " pages") + " reporting") +
       tile("Home network", bits(b.homeBps), bytesText(b.homeBytes) + " since start") +
+      tile("Tailnet", bits(b.tailnetBps || 0), bytesText(b.tailnetBytes || 0) + " since start") +
       tile("Internet", bits(b.internetBps), bytesText(b.internetBytes) + " since start") +
       tile("Total since start", bytesText(b.totalBytes), "since " + new Date(b.since).toLocaleString());
   }

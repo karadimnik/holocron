@@ -60,7 +60,7 @@ func TestBandwidthRejectsImplausibleReports(t *testing.T) {
 	}
 	for _, c := range cases {
 		var m bandwidthMeter
-		m.report(checkin(c.page, c.rate, c.bytes), "login01", false, now)
+		m.report(checkin(c.page, c.rate, c.bytes), "login01", netLAN, now)
 		got := m.snapshot(now, now)
 		if got.RejectedReport != 1 || got.TotalBytes != 0 || got.CurrentBps != 0 || got.Viewers != 0 {
 			t.Errorf("%s: %+v, want one rejection and nothing counted", c.name, got)
@@ -68,13 +68,13 @@ func TestBandwidthRejectsImplausibleReports(t *testing.T) {
 	}
 	// The cap itself is accepted.
 	var m bandwidthMeter
-	m.report(checkin(pageA, fmt.Sprint(uint64(bwMaxRate)), tooMany), "login01", false, now)
+	m.report(checkin(pageA, fmt.Sprint(uint64(bwMaxRate)), tooMany), "login01", netLAN, now)
 	if got := m.snapshot(now, now); got.RejectedReport != 0 || got.TotalBytes != uint64(bwMaxRate/8)*120 || got.CurrentBps != bwMaxRate {
 		t.Errorf("at the cap: %+v, want accepted", got)
 	}
 	// A check-in without the parameters is ordinary, not a rejection.
 	var plain bandwidthMeter
-	plain.report(checkin("", "", ""), "login01", false, now)
+	plain.report(checkin("", "", ""), "login01", netLAN, now)
 	if got := plain.snapshot(now, now); got.RejectedReport != 0 || got.Viewers != 0 {
 		t.Errorf("a plain check-in changed the meter: %+v", got)
 	}
@@ -83,18 +83,18 @@ func TestBandwidthRejectsImplausibleReports(t *testing.T) {
 func TestBandwidthBoundsBytesByTheIntervalOfThePage(t *testing.T) {
 	now := time.Date(2026, 11, 5, 12, 0, 0, 0, time.UTC)
 	var m bandwidthMeter
-	m.report(checkin(pageA, "1000000", "625000"), "l", false, now)
+	m.report(checkin(pageA, "1000000", "625000"), "l", netLAN, now)
 	// 5 s later: at most 1 Gbit/s for 5 s, that is 625 000 000 bytes.
-	m.report(checkin(pageA, "1000000", "625000001"), "l", false, now.Add(5*time.Second))
+	m.report(checkin(pageA, "1000000", "625000001"), "l", netLAN, now.Add(5*time.Second))
 	if got := m.snapshot(now.Add(5*time.Second), now); got.RejectedReport != 1 || got.TotalBytes != 625000 {
 		t.Errorf("too many bytes for the interval: %+v", got)
 	}
-	m.report(checkin(pageA, "1000000", "625000000"), "l", false, now.Add(10*time.Second))
+	m.report(checkin(pageA, "1000000", "625000000"), "l", netLAN, now.Add(10*time.Second))
 	if got := m.snapshot(now.Add(10*time.Second), now); got.RejectedReport != 1 || got.TotalBytes != 625000+625000000 {
 		t.Errorf("the most the interval allows: %+v", got)
 	}
 	// Reports closer together than the floor still get the floor.
-	m.report(checkin(pageA, "0", "1000"), "l", false, now.Add(10*time.Second+time.Second))
+	m.report(checkin(pageA, "0", "1000"), "l", netLAN, now.Add(10*time.Second+time.Second))
 	if got := m.snapshot(now.Add(11*time.Second), now); got.RejectedReport != 1 || got.TotalBytes != 625000+625000000+1000 {
 		t.Errorf("a quick second report: %+v", got)
 	}
@@ -103,10 +103,10 @@ func TestBandwidthBoundsBytesByTheIntervalOfThePage(t *testing.T) {
 func TestBandwidthSumsLatestRatesAndRunningBytes(t *testing.T) {
 	now := time.Date(2026, 11, 5, 12, 0, 0, 0, time.UTC)
 	var m bandwidthMeter
-	m.report(checkin(pageA, "1800000", "1000000"), "login01", false, now)
-	m.report(checkin(pageB, "2000000", "1250000"), "login02", true, now)
+	m.report(checkin(pageA, "1800000", "1000000"), "login01", netLAN, now)
+	m.report(checkin(pageB, "2000000", "1250000"), "login02", netRemote, now)
 	// The same page replaces its rate; bytes add up.
-	m.report(checkin(pageA, "1000000", "500000"), "login01", false, now.Add(5*time.Second))
+	m.report(checkin(pageA, "1000000", "500000"), "login01", netLAN, now.Add(5*time.Second))
 	got := m.snapshot(now.Add(5*time.Second), now)
 	if got.CurrentBps != 3_000_000 || got.HomeBps != 1_000_000 || got.InternetBps != 2_000_000 || got.Viewers != 2 {
 		t.Errorf("rates %+v, want 1 + 2 Mb/s from two pages", got)
@@ -115,7 +115,7 @@ func TestBandwidthSumsLatestRatesAndRunningBytes(t *testing.T) {
 		t.Errorf("bytes %+v, want home 1.5 MB, internet 1.25 MB", got)
 	}
 	// One login with two tabs is two pages.
-	m.report(checkin(pageB, "700000", "10"), "login01", false, now.Add(5*time.Second))
+	m.report(checkin(pageB, "700000", "10"), "login01", netLAN, now.Add(5*time.Second))
 	if got := m.snapshot(now.Add(5*time.Second), now); got.Viewers != 3 || got.CurrentBps != 1_000_000+2_000_000+700_000 {
 		t.Errorf("two tabs of one login: %+v", got)
 	}
@@ -124,8 +124,8 @@ func TestBandwidthSumsLatestRatesAndRunningBytes(t *testing.T) {
 func TestBandwidthRatesExpireButTotalsStay(t *testing.T) {
 	now := time.Date(2026, 11, 5, 12, 0, 0, 0, time.UTC)
 	var m bandwidthMeter
-	m.report(checkin(pageA, "1800000", "225000"), "l1", false, now)
-	m.report(checkin(pageB, "900000", "112500"), "l2", true, now.Add(10*time.Second))
+	m.report(checkin(pageA, "1800000", "225000"), "l1", netLAN, now)
+	m.report(checkin(pageB, "900000", "112500"), "l2", netRemote, now.Add(10*time.Second))
 	at := func(d time.Duration) BandwidthReport { return m.snapshot(now.Add(d), now) }
 	if got := at(10 * time.Second); got.CurrentBps != 2_700_000 || got.Viewers != 2 {
 		t.Errorf("both fresh: %+v", got)
@@ -147,11 +147,11 @@ func TestBandwidthMapIsBounded(t *testing.T) {
 	var m bandwidthMeter
 	page := func(i int) string { return fmt.Sprintf("%016x", i) }
 	for i := 0; i < bwKeep; i++ {
-		m.report(checkin(page(i), "1000", "10"), "l", false, now)
+		m.report(checkin(page(i), "1000", "10"), "l", netLAN, now)
 	}
 	// Full of fresh pages: a newcomer is refused, a known page still updates.
-	m.report(checkin(page(bwKeep), "1000", "10"), "l", false, now.Add(time.Second))
-	m.report(checkin(page(0), "2000", "10"), "l", false, now.Add(time.Second))
+	m.report(checkin(page(bwKeep), "1000", "10"), "l", netLAN, now.Add(time.Second))
+	m.report(checkin(page(0), "2000", "10"), "l", netLAN, now.Add(time.Second))
 	if len(m.pages) != bwKeep {
 		t.Fatalf("%d pages, want at most %d", len(m.pages), bwKeep)
 	}
@@ -159,7 +159,7 @@ func TestBandwidthMapIsBounded(t *testing.T) {
 		t.Errorf("full map: %+v", got)
 	}
 	// Once they have been silent a while the newcomer replaces them.
-	m.report(checkin(page(bwKeep), "1000", "10"), "l", false, now.Add(bwMaxElapsed+2*time.Second))
+	m.report(checkin(page(bwKeep), "1000", "10"), "l", netLAN, now.Add(bwMaxElapsed+2*time.Second))
 	if len(m.pages) != 1 {
 		t.Errorf("%d pages after the sweep, want 1", len(m.pages))
 	}

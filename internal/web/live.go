@@ -107,7 +107,7 @@ type liveWho struct {
 	loginID string // the opaque short id of the login session (loginIDOf), never the cookie
 	stream  string // sub or main
 	peer    string
-	remote  bool
+	network string // netLAN, netTailnet or netRemote
 }
 
 // liveHub holds the session table and the per-episode log flags.
@@ -578,10 +578,13 @@ func (h *liveHub) releaseLocked(camera string) {
 // whoOpened is the viewer of a request that opens a session. A request on the loopback listener has
 // no login (the gate puts nothing in its context), so it carries no user and no login id.
 func (a *API) whoOpened(r *http.Request, stream string) liveWho {
-	who := liveWho{stream: stream, peer: sourceIP(r)}
+	who := liveWho{stream: stream, peer: peerAddr(r), network: netLAN}
+	if a.auth != nil { // the HTTPS listener: the client may be named by a trusted proxy
+		who.peer, _ = a.auth.clientIP(r)
+		who.network = a.auth.netClass(r)
+	}
 	if user, ok := userFrom(r); ok {
 		who.user, who.loginID = user.Username, loginFrom(r)
-		who.remote = a.auth != nil && a.auth.remote(r)
 	}
 	return who
 }

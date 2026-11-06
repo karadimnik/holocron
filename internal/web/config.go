@@ -74,6 +74,13 @@ type Config struct {
 	// there by config.NormalizeRemoteHost); not the camui config file, not a flag.
 	RemoteHost string `json:"-"`
 
+	// TrustedProxy is the one address of a reverse proxy in front of the HTTPS listener
+	// (clientaddr.go): a request whose TCP peer is exactly this address has its client read from
+	// X-Forwarded-For. Empty is off: no header is read. Only web.trustedProxy in
+	// holocron.config.json sets it (validated there by config.NormalizeTrustedProxy); not the
+	// camui config file, not a flag.
+	TrustedProxy string `json:"-"`
+
 	// TLSDir holds the local CA and the server certificate with their keys.
 	// Default %LOCALAPPDATA%\IPCCTV\tls. Never inside the repository.
 	TLSDir string `json:"tlsDir"`

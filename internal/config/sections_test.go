@@ -189,3 +189,36 @@ func TestSecretsFilePaths(t *testing.T) {
 		t.Errorf("defaults %+v", d)
 	}
 }
+
+func TestWebTrustedProxy(t *testing.T) {
+	if d := Defaults(linP).Web.TrustedProxy; d != "" {
+		t.Errorf("default %q, want off", d)
+	}
+	for in, want := range map[string]string{
+		"127.0.0.2": "127.0.0.2", "127.0.0.1": "127.0.0.1", "192.168.1.8": "192.168.1.8", "10.1.2.3": "10.1.2.3", "172.16.0.9": "172.16.0.9",
+		"::1": "::1", "fd00::5": "fd00::5", "FD00:0:0:0:0:0:0:5": "fd00::5", "::ffff:127.0.0.2": "127.0.0.2", "": "",
+	} {
+		c, _, err := Parse([]byte(`{"web":{"trustedProxy":"`+in+`"}}`), linP)
+		if err != nil || c.Web.TrustedProxy != want {
+			t.Errorf("%q: %q %v", in, c.Web.TrustedProxy, err)
+		}
+	}
+	for _, bad := range []struct{ in, text string }{
+		{"0.0.0.0", "unspecified"}, {"::", "unspecified"}, {"*", "wildcard"}, {"192.168.*", "wildcard"},
+		{"192.168.1.0/24", "CIDR"}, {"127.0.0.0/8", "CIDR"}, {"localhost", "not an IP address"}, {"proxy.example.org", "not an IP address"},
+		{"127.0.0.2:18443", "not an IP address"}, {"[::1]", "not an IP address"}, {"127.0.0.2 ", "space"}, {" 127.0.0.2", "space"}, {"127.0.0.2, 127.0.0.3", "space"},
+		{"203.0.113.7", "public"}, {"8.8.8.8", "public"}, {"2001:db8::1", "public"}, {"100.64.0.1", "public"}, {"169.254.1.1", "public"}, {"fe80::1", "public"},
+		{"fe80::1%eth0", "zone"}, {"224.0.0.1", "public"},
+	} {
+		_, _, err := Parse([]byte(`{"web":{"trustedProxy":"`+bad.in+`"}}`), linP)
+		var ve *ValidationError
+		if !errors.As(err, &ve) || ve.Problems[0].Path != "web.trustedProxy" || !strings.Contains(ve.Problems[0].Message, bad.text) {
+			t.Errorf("%q: %v", bad.in, err)
+		}
+	}
+	_, _, err := Parse([]byte(`{"web":{"trustedProxy":7}}`), linP)
+	var ve *ValidationError
+	if !errors.As(err, &ve) || ve.Problems[0].Path != "web.trustedProxy" || !strings.Contains(ve.Problems[0].Message, "string") {
+		t.Errorf("a number: %v", err)
+	}
+}

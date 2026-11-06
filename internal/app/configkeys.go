@@ -49,6 +49,7 @@ var editableRules = map[string]string{
 	"secrets.file":                "a local path; empty = secrets.enc in the auth folder",
 	"secrets.keyFile":             "a local path; empty = secrets.key in the auth folder",
 	"web.enabled":                 "true or false: holocron up starts the web app",
+	"web.trustedProxy":            "empty (off) or one loopback or private IP address, such as 127.0.0.2: the reverse proxy whose X-Forwarded-For names the real client",
 }
 
 // storeWarning is said for every key that decides where the camera login is stored.

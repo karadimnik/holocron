@@ -21,9 +21,10 @@ import (
 // the latest rate of every page with the time it arrived, and a running total of the reported
 // bytes. The current combined rate is the sum of the rates that arrived within bwWindow; a page
 // that closed or went quiet drops out of it by itself. A report is counted as home (the LAN
-// listener's non-remote peers and the PC itself) or internet (the remote-access peers) by how its
-// check-in arrived: the gate's own remote test (authService.remote), the one that caps a remote
-// login to viewing.
+// listener's LAN peers and the PC itself), tailnet (Tailscale clients) or internet (the remote-access
+// peers) by how its check-in arrived: the gate's own class of the client (authService.netClass),
+// the one that caps a remote login to viewing. Behind a trusted proxy (web.trustedProxy) the class is
+// the real client's, not the proxy's.
 //
 // Reports are not trusted. One that is malformed or implausible is ignored whole (the status answer
 // is unaffected) and counted in Rejected:
@@ -43,10 +44,10 @@ const (
 var bwPageID = regexp.MustCompile(`^[0-9a-f]{8,32}$`)
 
 type bwPage struct {
-	key    string // login id + "/" + page id
-	rate   uint64 // bits per second
-	at     time.Time
-	remote bool
+	key     string // login id + "/" + page id
+	rate    uint64 // bits per second
+	at      time.Time
+	network string // netLAN, netTailnet or netRemote
 }
 
 // bandwidthMeter is the in-memory state. The zero value is ready.
@@ -54,6 +55,7 @@ type bandwidthMeter struct {
 	mu       sync.Mutex
 	pages    map[string]bwPage
 	home     uint64 // bytes since start
+	tailnet  uint64
 	internet uint64
 	rejected int
 }
@@ -62,11 +64,13 @@ type bandwidthMeter struct {
 type BandwidthReport struct {
 	CurrentBps     uint64    `json:"currentBps"`  // all viewers, bits per second
 	HomeBps        uint64    `json:"homeBps"`     // ... of which on the home network (and the PC itself)
+	TailnetBps     uint64    `json:"tailnetBps"`  // ... of which from Tailscale clients
 	InternetBps    uint64    `json:"internetBps"` // ... of which over remote access
 	Viewers        int       `json:"viewers"`     // pages that reported within WindowSeconds
 	WindowSeconds  int       `json:"windowSeconds"`
 	TotalBytes     uint64    `json:"totalBytes"` // since Holocron's web app started; resets at a restart
 	HomeBytes      uint64    `json:"homeBytes"`
+	TailnetBytes   uint64    `json:"tailnetBytes"`
 	InternetBytes  uint64    `json:"internetBytes"`
 	Since          time.Time `json:"since"`
 	RejectedReport int       `json:"rejectedReports"` // implausible reports ignored since start
@@ -94,8 +98,8 @@ func parseBandwidth(r *http.Request) (page string, rate, bytes uint64, present, 
 }
 
 // report records one check-in's bandwidth parameters, if it carries any. who is the login id ("" on
-// the loopback listener), remote is the gate's verdict for the peer.
-func (m *bandwidthMeter) report(r *http.Request, who string, remote bool, now time.Time) {
+// the loopback listener), network is the gate's class of the client (netLAN, netTailnet, netRemote).
+func (m *bandwidthMeter) report(r *http.Request, who, network string, now time.Time) {
 	page, rate, bytes, present, ok := parseBandwidth(r)
 	if !present {
 		return
@@ -130,10 +134,13 @@ func (m *bandwidthMeter) report(r *http.Request, who string, remote bool, now ti
 			return
 		}
 	}
-	m.pages[key] = bwPage{key: key, rate: rate, at: now, remote: remote}
-	if remote {
+	m.pages[key] = bwPage{key: key, rate: rate, at: now, network: network}
+	switch network {
+	case netRemote:
 		m.internet += bytes
-	} else {
+	case netTailnet:
+		m.tailnet += bytes
+	default:
 		m.home += bytes
 	}
 }
@@ -143,16 +150,19 @@ func (m *bandwidthMeter) snapshot(now time.Time, since time.Time) BandwidthRepor
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	out := BandwidthReport{WindowSeconds: int(bwWindow / time.Second), Since: since,
-		HomeBytes: m.home, InternetBytes: m.internet, TotalBytes: m.home + m.internet, RejectedReport: m.rejected}
+		HomeBytes: m.home, TailnetBytes: m.tailnet, InternetBytes: m.internet, TotalBytes: m.home + m.tailnet + m.internet, RejectedReport: m.rejected}
 	for _, p := range m.pages {
 		if now.Sub(p.at) > bwWindow {
 			continue
 		}
 		out.Viewers++
 		out.CurrentBps += p.rate
-		if p.remote {
+		switch p.network {
+		case netRemote:
 			out.InternetBps += p.rate
-		} else {
+		case netTailnet:
+			out.TailnetBps += p.rate
+		default:
 			out.HomeBps += p.rate
 		}
 	}
@@ -162,10 +172,12 @@ func (m *bandwidthMeter) snapshot(now time.Time, since time.Time) BandwidthRepor
 // noteBandwidth is called by GET /api/status for the page's check-in.
 func (a *API) noteBandwidth(r *http.Request) {
 	h := a.hub()
-	who, remote := "", false
+	who, network := "", netLAN
 	if _, signedIn := userFrom(r); signedIn {
 		who = loginFrom(r)
-		remote = a.auth != nil && a.auth.remote(r)
+		if a.auth != nil {
+			network = a.auth.netClass(r)
+		}
 	}
-	h.bw.report(r, who, remote, h.now())
+	h.bw.report(r, who, network, h.now())
 }

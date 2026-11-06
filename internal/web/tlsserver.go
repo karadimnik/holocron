@@ -101,13 +101,17 @@ func newTLSHandler(cfg Config, log *slog.Logger, certs serverCerts, names certNa
 		auth.runner = env.runner
 	}
 	auth.remoteHost = cfg.RemoteHost
+	if auth.trustedProxy, err = trustedProxyOf(cfg.TrustedProxy); err != nil {
+		return nil, err
+	}
 	auth.routes(mux)
 	// The CA files and their fingerprints are for LAN and loopback peers only: a remote peer gets
 	// the 404 of a route that does not exist. A CA fetched over the public name could be an
 	// attacker's (trust on first use), so a phone installs the remote CA on the home network.
 	lanOnly := func(w http.ResponseWriter, r *http.Request) bool {
 		if auth.remote(r) {
-			log.Warn("certificate authority refused to a remote peer", "path", r.URL.Path, "ip", sourceIP(r))
+			from, _ := auth.clientIP(r)
+			log.Warn("certificate authority refused to a remote peer", "path", r.URL.Path, "ip", from)
 			http.NotFound(w, r)
 			return false
 		}

@@ -47,10 +47,10 @@ func loginFrom(r *http.Request) string {
 }
 
 type presenceEntry struct {
-	user   string
-	peer   string
-	remote bool
-	last   time.Time
+	user    string
+	peer    string
+	network string // netLAN, netTailnet or netRemote (admin_sessions.go)
+	last    time.Time
 }
 
 // presenceMap is the last poll of every login session, by login id. The zero value is ready.
@@ -59,13 +59,13 @@ type presenceMap struct {
 	m  map[string]presenceEntry
 }
 
-func (p *presenceMap) touch(loginID, user, peer string, remote bool, now time.Time) {
+func (p *presenceMap) touch(loginID, user, peer, network string, now time.Time) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	if p.m == nil {
 		p.m = map[string]presenceEntry{}
 	}
-	p.m[loginID] = presenceEntry{user: user, peer: peer, remote: remote, last: now}
+	p.m[loginID] = presenceEntry{user: user, peer: peer, network: network, last: now}
 	if len(p.m) > presenceKeep {
 		for id, e := range p.m {
 			if now.Sub(e.last) > presenceIdle {

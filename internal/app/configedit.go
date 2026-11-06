@@ -31,7 +31,7 @@ var EditableKeys = []string{
 	"alerts.push.enabled", "alerts.push.server", "alerts.push.topic", "alerts.push.tokenName",
 	"alerts.desktop.enabled", "alerts.eventlog.enabled",
 	"secrets.backend", "secrets.file", "secrets.keyFile",
-	"web.enabled",
+	"web.enabled", "web.trustedProxy",
 }
 
 // CanonicalKey matches key against the allow-list (case-insensitive) and returns its spelling;

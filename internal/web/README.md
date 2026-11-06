@@ -53,7 +53,8 @@ re-read from `users.json` on every request. The loopback listener and the token 
 
 With `Config.RemoteHost` set (only from `web.remoteHost` in holocron.config.json, `json:"-"`), the HTTPS listener's Host
 allowlist adds that name, and `authService.gate` treats a request whose TCP peer is public (`PeerIsRemote`: not loopback,
-RFC 1918, ULA, link-local, CGNAT, unspecified; unparsable is remote; no forwarding header is read) as remote: its Host must be
+RFC 1918, ULA, link-local, CGNAT, unspecified; unparsable is remote; no forwarding header is read, except from the one
+`web.trustedProxy` peer, below) as remote: its Host must be
 RemoteHost, its effective role is viewer, the view-only allow-list applies whatever `TLSReadOnly` says, its session is held to
 `remoteSession` (12 h idle, 7 days), its sign-in takes the extra `remoteLimiter` bucket (2 a minute, 3 banked, IPv6 by /64),
 and `remoteHeaders` adds HSTS (one day), nosniff and API no-store. RemoteHost has its own CA (`tlsca.go`:
@@ -63,6 +64,20 @@ that DNS name and excluding every IP, `remoteCAProblem` checks it, `ensureRemote
 (`?ca=remote` for the remote CA) and `/api/tls/info` answer 404 to remote peers; `/api/auth/me` says `remote`.
 `RemoteCertState` feeds doctor. Tests: `tlsremote_test.go`. `RemotePolicy`, `UserRoles` and `ReadSignInFailures` feed `holocron doctor`'s `web.remote`. Tests:
 `remote_test.go`. Guide: [docs/ui.md](../../docs/ui.md#reaching-holocron-from-outside-the-home-network).
+
+## Client address and the trusted proxy (`clientaddr.go`)
+
+Every decision or record that used the TCP peer on the HTTPS listener goes through `authService.clientIP` (the effective
+client address) and `authService.netClass` (`lan`, `tailnet` or `remote`); `peerAddr` is the raw peer, for the loopback
+listener only. With `Config.TrustedProxy` set (only from `web.trustedProxy`, `json:"-"`, checked again by `trustedProxyOf`),
+a request whose peer is exactly that address has its client read from the right-most `X-Forwarded-For` entry; a missing,
+empty or non-address entry falls back to the peer; every other peer's header is ignored. `tailnetV4` and `tailnetV6`
+(`100.64.0.0/10`, `fd7a:115c:a1e0::/48`) are the `tailnet` class from any source; a tailnet client is granted what a LAN client
+is. A public client behind the proxy is remote even with `RemoteHost` empty, and the gate then refuses it (its Host cannot
+name an empty `RemoteHost`). Users of the effective address: `gate` (class, `denied` records, presence), `audit` and the
+sign-in throttles (`handleLogin`), `whoOpened` (live table), `noteBandwidth` (three buckets), the CA `lanOnly` check, and
+`ReadSignInFailures` (reads what `auth.log` holds). Tests: `trustedproxy_test.go`. Guide:
+[docs/ui.md](../../docs/ui.md#behind-a-reverse-proxy-or-a-tunnel).
 
 ## The Admin tab (`admin_api.go`, `static/admin.js`)
 

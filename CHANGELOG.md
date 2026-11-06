@@ -20,6 +20,16 @@ A version is `MAJOR.MINOR.PATCH`, tagged `vMAJOR.MINOR.PATCH`. The public interf
 
 ## [Unreleased]
 
+### Added
+
+- Behind a reverse proxy or a tunnel (nginx, `tailscale serve`), Holocron can now tell who is really visiting. The new opt-in key `web.trustedProxy` (editable with `holocron config set web.trustedProxy 127.0.0.2`, read when the web app starts; empty and off by default) names the one loopback or private address the proxy connects from; a connection from exactly that address has its client read from the right-most `X-Forwarded-For` entry, and a connection from any other address has the header ignored. Host names, wildcards, CIDR ranges, ports and public addresses are refused. A missing or malformed header falls back to the proxy's own address, never to a more trusted class.
+- A new `tailnet` class for Tailscale addresses (`100.64.0.0/10`, `fd7a:115c:a1e0::/48`), from any source. It is granted what the LAN is granted (sign-in, the account's role, `tlsReadOnly` as on the LAN); it is a label, a bandwidth bucket and a log field. It shows in Who's online (Dashboard and Admin), `holocron user sessions [--json]` and the bandwidth block, which now has three buckets: home network, tailnet and internet (`tailnetBps` and `tailnetBytes` in `GET /api/admin/sessions`, a Tailnet tile on the Dashboard).
+- Behind the trusted proxy the sign-in throttle, `auth.log`, the audit records, the live-view table and Who's online are per real client instead of one shared proxy address, and a public client behind it gets the remote restrictions (viewer-only, stricter sign-in bucket, short sessions; it is refused when remote access is off). `holocron doctor --group web` has a `web.proxy` line and `holocron status` a `trusted proxy` line when the key is set; the doctor's sign-in failure counts include the tailnet. A how-to for `tailscale serve` with nginx (`proxy_bind 127.0.0.2;`) and the security notes are in [docs/ui.md](docs/ui.md#behind-a-reverse-proxy-or-a-tunnel).
+
+### Changed
+
+- A Tailscale address (`100.64.0.0/10`) is now labelled `tailnet` instead of `lan` in Who's online and counted in its own bandwidth bucket instead of home. What it is allowed to do is unchanged. The `holocron doctor` remote-access line shows `(LAN: n, tailnet: n)` and `holocron user sessions` prints the tailnet figures.
+
 ## [1.7.0] - 2026-11-05
 
 ### Added

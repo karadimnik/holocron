@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"regexp"
 	"runtime"
 	"strings"
 	"testing"
@@ -63,7 +64,7 @@ func TestDoctorWebRemote(t *testing.T) {
 		"web.remote warn remote certificate",
 		"there is no remote CA for remote.example.org yet, so a phone outside the home network cannot trust the name",
 		"no viewer account: only admins could sign in remotely, and they would be capped to viewer",
-		"20 failed or locked remote sign-in attempt(s) in 24 h (LAN: 2); top peers: 203.0.113.7 (12), 198.51.100.9 (5), 2001:db8::1 (2)",
+		"20 failed or locked remote sign-in attempt(s) in 24 h (LAN: 1, tailnet: 1); top peers: 203.0.113.7 (12), 198.51.100.9 (5), 2001:db8::1 (2)",
 	} {
 		if !strings.Contains(text, want) {
 			t.Errorf("missing %q in\n%s", want, text)
@@ -171,5 +172,52 @@ func TestDoctorWebRemoteCertificate(t *testing.T) {
 	text = textOf(t, mustRun(r, "--json", "doctor", "--group", "web"))
 	if !strings.Contains(text, "cannot serve other.example.org: it is for remote.example.org, not other.example.org; the web role replaces it at its next start and every phone must then install the new one") {
 		t.Errorf("a remote CA for the old name not reported:\n%s", text)
+	}
+}
+
+func TestDoctorWebProxy(t *testing.T) {
+	r := newRig(t)
+	r.running()
+	authDir := remoteRigConfig(t, r, "")
+	r.doctorTools(nil)
+	if out := mustRun(r, "--json", "doctor", "--group", "web"); strings.Contains(out, "trusted proxy") {
+		t.Errorf("trusted proxy off, yet:\n%s", out)
+	}
+
+	now := time.Now()
+	var log strings.Builder
+	for _, ip := range []string{"100.100.1.1", "100.100.1.1", "fd7a:115c:a1e0::3", "192.168.1.20", "203.0.113.7"} {
+		fmt.Fprintf(&log, "%s ip=%s event=login result=fail user=%q\n", now.Add(-time.Hour).UTC().Format(time.RFC3339), ip, "anna")
+	}
+	os.WriteFile(filepath.Join(authDir, "auth.log"), []byte(log.String()), 0o600)
+	if _, _, code := r.run("config", "set", "web.trustedProxy", "127.0.0.2"); code != 0 {
+		t.Fatalf("config set: %d", code)
+	}
+	out := mustRun(r, "--json", "doctor", "--group", "web")
+	text := textOf(t, out)
+	for _, want := range []string{
+		"web.proxy info trusted proxy  X-Forwarded-For is read only from connections that come from 127.0.0.2; every other peer's header is ignored",
+		"refused sign-ins in 24 h: 1 from home, 3 from the tailnet, 1 from the internet",
+	} {
+		if !strings.Contains(text, want) {
+			t.Errorf("missing %q in\n%s", want, text)
+		}
+	}
+	if strings.Contains(text, "web.proxy warn") {
+		t.Errorf("a dedicated proxy address warned:\n%s", text)
+	}
+	if st, _, _ := r.run("status"); !strings.Contains(st, "trusted proxy: 127.0.0.2 (X-Forwarded-For is read only from it)") {
+		t.Errorf("status has no trusted proxy line:\n%s", st)
+	}
+
+	// The proxy at the HTTPS listener's own address warns; without a listener it warns as well.
+	r.run("config", "set", "web.trustedProxy", "192.168.1.50")
+	if text := textOf(t, mustRun(r, "--json", "doctor", "--group", "web")); !strings.Contains(text, "web.proxy warn trusted proxy  web.trustedProxy 192.168.1.50 is this PC's own HTTPS listener address") {
+		t.Errorf("no warning for the listener's own address:\n%s", text)
+	}
+	cfg, _ := os.ReadFile(r.cfg)
+	os.WriteFile(r.cfg, []byte(regexp.MustCompile(`"tlsListen":\s*"[^"]*",?`).ReplaceAllString(string(cfg), `"tlsListen": "",`)), 0o644)
+	if text := textOf(t, mustRun(r, "--json", "doctor", "--group", "web")); !strings.Contains(text, "web.proxy warn trusted proxy  web.trustedProxy is 192.168.1.50 but web.tlsListen is empty") {
+		t.Errorf("no warning without a listener:\n%s", text)
 	}
 }
