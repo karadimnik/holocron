@@ -50,7 +50,7 @@ jobs:
           ' CHANGELOG.md > "$RUNNER_TEMP/release-notes.md" || { echo "::error::CHANGELOG.md has no section ## [$version]"; exit 1; }
           grep -q '[^[:space:]]' "$RUNNER_TEMP/release-notes.md" || { echo "::error::the CHANGELOG.md section for $version is empty"; exit 1; }
           cat "$RUNNER_TEMP/release-notes.md"
-      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+      - uses: actions/setup-go@d8cbb8045d7f43706b9177cceb36c1f91a6644d5 # v7.1.0
         with:
           go-version-file: go.mod
           cache: false # no dependencies, so no go.sum to key a cache on
